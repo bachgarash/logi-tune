@@ -1,0 +1,19 @@
+# uinput — allow input group to create virtual input devices
+KERNEL=="uinput", MODE="0660", GROUP="input"
+
+# Logitech MX series — grant rw access to members of the `input` group
+# USB/Unifying rules (match by idVendor/idProduct via USB parent)
+# MX Master 2S
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="b012", MODE="0660", GROUP="input"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="b019", MODE="0660", GROUP="input"
+# MX Master 3 / 3 for Mac
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="b023", MODE="0660", GROUP="input"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="b022", MODE="0660", GROUP="input"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="b026", MODE="0660", GROUP="input"
+# MX Master 3S / 3S for Mac
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="b034", MODE="0660", GROUP="input"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="b028", MODE="0660", GROUP="input"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="b02a", MODE="0660", GROUP="input"
+
+# Bluetooth rules (BT HID devices appear as KERNELS=="0005:046D:PPPP.*")
+SUBSYSTEM=="hidraw", KERNELS=="0005:046D:*", MODE="0660", GROUP="input"

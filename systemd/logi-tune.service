@@ -1,0 +1,14 @@
+[Unit]
+Description=logi-tune button daemon (MX Master key mapping)
+After=bluetooth.target graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/logi-tune --daemon
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=graphical-session.target
