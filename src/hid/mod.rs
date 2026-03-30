@@ -7,19 +7,11 @@ pub mod protocol;
 
 pub use device::MxMaster;
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 #[allow(dead_code)]
 pub const LOGITECH_VID: u16 = 0x046d;
 pub const REPORT_ID_SHORT: u8 = 0x10; // 7-byte report
 pub const REPORT_ID_LONG: u8 = 0x11; // 20-byte report
 pub const DEVICE_INDEX_DIRECT: u8 = 0xff; // USB or BT direct connection
-
-// ---------------------------------------------------------------------------
-// DeviceModel
-// ---------------------------------------------------------------------------
 
 /// Enumeration of all supported Logitech MX series models.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -44,10 +36,6 @@ impl DeviceModel {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Supported device lookup table
-// ---------------------------------------------------------------------------
-
 /// `(vid, pid, model)` lookup table for all supported devices.
 pub static SUPPORTED_DEVICES: &[(u16, u16, DeviceModel)] = &[
     (0x046d, 0xb012, DeviceModel::MxMaster2S),
@@ -59,10 +47,6 @@ pub static SUPPORTED_DEVICES: &[(u16, u16, DeviceModel)] = &[
     (0x046d, 0xb028, DeviceModel::MxMaster3S),
     (0x046d, 0xb02a, DeviceModel::MxMaster3SForMac),
 ];
-
-// ---------------------------------------------------------------------------
-// HidError
-// ---------------------------------------------------------------------------
 
 /// Errors that can arise from HID device communication.
 #[derive(thiserror::Error, Debug)]

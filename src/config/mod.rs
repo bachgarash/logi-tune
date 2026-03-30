@@ -6,10 +6,6 @@ use std::path::PathBuf;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-// ---------------------------------------------------------------------------
-// ButtonAction
-// ---------------------------------------------------------------------------
-
 /// The action assigned to a mouse button.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ButtonAction {
@@ -48,10 +44,6 @@ impl fmt::Display for ButtonAction {
     }
 }
 
-// ---------------------------------------------------------------------------
-// ButtonConfig
-// ---------------------------------------------------------------------------
-
 /// Per-button action assignments.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -84,10 +76,6 @@ impl Default for ButtonConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// ScrollConfig
-// ---------------------------------------------------------------------------
-
 /// Scroll wheel settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -109,10 +97,6 @@ impl Default for ScrollConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// ThumbWheelConfig
-// ---------------------------------------------------------------------------
-
 /// Horizontal thumb wheel settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -130,10 +114,6 @@ impl Default for ThumbWheelConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// DpiConfig
-// ---------------------------------------------------------------------------
-
 /// DPI profile list and active slot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -150,10 +130,6 @@ impl Default for DpiConfig {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Config (root)
-// ---------------------------------------------------------------------------
 
 /// Root configuration struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -11,15 +11,9 @@ use ratatui::{
 use super::app::{App, Tab};
 use super::tabs;
 
-// ---------------------------------------------------------------------------
-// render
-// ---------------------------------------------------------------------------
-
 /// Render the full UI into the given frame.
 pub fn render(f: &mut Frame, app: &mut App) {
     let area = f.area();
-
-    // Outer layout: title | tabs | main | status
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -40,14 +34,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Title bar
-// ---------------------------------------------------------------------------
-
 fn render_title(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let title_text = format!(" logi-tune v0.1.0 — {}", app.device_name);
-
-    // Split title area: left = app name, right = battery widget
     let battery_text = format_battery(app);
     let battery_width = battery_text.iter().map(|s| s.content.len() as u16).sum::<u16>();
 
@@ -77,7 +65,6 @@ fn format_battery(app: &App) -> Vec<Span<'static>> {
         None => return vec![Span::raw("??? ")],
     };
 
-    // 10-block bar
     let filled = (level as usize * 10 / 100).min(10);
     let bar: String = "█".repeat(filled) + &"░".repeat(10 - filled);
 
@@ -109,10 +96,6 @@ fn format_battery(app: &App) -> Vec<Span<'static>> {
     ]
 }
 
-// ---------------------------------------------------------------------------
-// Tab bar
-// ---------------------------------------------------------------------------
-
 fn render_tabs(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let titles = vec!["Buttons", "Scroll", "Thumb Wheel", "DPI"];
     let tabs = Tabs::new(titles)
@@ -127,10 +110,6 @@ fn render_tabs(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     f.render_widget(tabs, area);
 }
 
-// ---------------------------------------------------------------------------
-// Main area — dispatches to active tab
-// ---------------------------------------------------------------------------
-
 fn render_main(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
     match app.active_tab {
         Tab::Buttons => tabs::buttons::render(f, app, area),
@@ -139,10 +118,6 @@ fn render_main(f: &mut Frame, app: &mut App, area: ratatui::layout::Rect) {
         Tab::Dpi => tabs::dpi::render(f, app, area),
     }
 }
-
-// ---------------------------------------------------------------------------
-// Status bar
-// ---------------------------------------------------------------------------
 
 const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -178,10 +153,6 @@ fn render_status(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let paragraph = Paragraph::new(Line::from(spans));
     f.render_widget(paragraph, area);
 }
-
-// ---------------------------------------------------------------------------
-// Help overlay
-// ---------------------------------------------------------------------------
 
 fn render_help(f: &mut Frame) {
     use ratatui::{layout::Rect, widgets::Clear};

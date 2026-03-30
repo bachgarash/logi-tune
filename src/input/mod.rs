@@ -6,19 +6,12 @@ use std::os::unix::io::AsRawFd;
 
 use anyhow::{Context, Result};
 
-// ---------------------------------------------------------------------------
-// Event and device constants
-// ---------------------------------------------------------------------------
-
 const EV_SYN: u16 = 0x00;
 const EV_KEY: u16 = 0x01;
 const SYN_REPORT: u16 = 0;
 const BUS_VIRTUAL: u16 = 0x06;
 
-// ---------------------------------------------------------------------------
-// C structs (must match kernel layout on 64-bit Linux)
-// ---------------------------------------------------------------------------
-
+// C structs must match kernel layout on 64-bit Linux.
 #[repr(C)]
 struct InputId {
     bustype: u16,
@@ -44,10 +37,6 @@ struct InputEvent {
     value: i32,
 }
 
-// ---------------------------------------------------------------------------
-// ioctl definitions (linux/uinput.h)
-// ---------------------------------------------------------------------------
-
 nix::ioctl_write_int!(ui_set_evbit, b'U', 100);
 nix::ioctl_write_int!(ui_set_keybit, b'U', 101);
 nix::ioctl_write_int!(ui_set_relbit, b'U', 102);
@@ -55,10 +44,6 @@ nix::ioctl_write_int!(ui_set_mscbit, b'U', 105);
 nix::ioctl_write_ptr!(ui_dev_setup, b'U', 3, UinputSetup);
 nix::ioctl_none!(ui_dev_create, b'U', 1);
 nix::ioctl_none!(ui_dev_destroy, b'U', 2);
-
-// ---------------------------------------------------------------------------
-// UinputKeyboard
-// ---------------------------------------------------------------------------
 
 pub struct UinputKeyboard {
     file: File,
@@ -76,7 +61,6 @@ impl UinputKeyboard {
         unsafe {
             ui_set_evbit(fd, EV_KEY as u64).context("UI_SET_EVBIT EV_KEY")?;
             ui_set_evbit(fd, EV_SYN as u64).context("UI_SET_EVBIT EV_SYN")?;
-            // Enable all standard key codes
             for code in 1u16..=255 {
                 let _ = ui_set_keybit(fd, code as u64);
             }
@@ -143,10 +127,6 @@ impl Drop for UinputKeyboard {
     }
 }
 
-// ---------------------------------------------------------------------------
-// UinputMouse — pass-through virtual mouse
-// ---------------------------------------------------------------------------
-
 const EV_REL: u16 = 0x02;
 const EV_MSC: u16 = 0x04;
 
@@ -171,7 +151,6 @@ impl UinputMouse {
             ui_set_evbit(fd, EV_REL as u64).context("UI_SET_EVBIT EV_REL")?;
             ui_set_evbit(fd, EV_MSC as u64).context("UI_SET_EVBIT EV_MSC")?;
 
-            // All standard mouse buttons
             for code in 272u16..=287 {
                 let _ = ui_set_keybit(fd, code as u64);
             }
@@ -220,10 +199,6 @@ impl Drop for UinputMouse {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Key name → Linux key code mapping
-// ---------------------------------------------------------------------------
 
 fn key_name_to_code(name: &str) -> Option<u16> {
     match name.to_lowercase().as_str() {

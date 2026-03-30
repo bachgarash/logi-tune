@@ -19,10 +19,6 @@ use crate::hid::{
 
 use super::ui::render;
 
-// ---------------------------------------------------------------------------
-// Tab
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tab {
     Buttons,
@@ -51,10 +47,6 @@ impl Tab {
     }
 }
 
-// ---------------------------------------------------------------------------
-// InputMode
-// ---------------------------------------------------------------------------
-
 /// The current input mode drives how key events are interpreted.
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputMode {
@@ -62,10 +54,6 @@ pub enum InputMode {
     ActionPicker,
     TextInput { prompt: String, buffer: String },
 }
-
-// ---------------------------------------------------------------------------
-// App
-// ---------------------------------------------------------------------------
 
 /// Top-level application state.
 pub struct App {
@@ -80,13 +68,11 @@ pub struct App {
     pub should_quit: bool,
     pub show_help: bool,
 
-    // Per-tab cursor positions
     pub button_selected: usize,
     pub scroll_selected: usize,
     pub thumb_selected: usize,
     pub dpi_selected: usize,
 
-    // Input mode
     pub input_mode: InputMode,
     /// Index of the action being picked (ActionPicker mode)
     pub action_picker_index: usize,
@@ -149,17 +135,12 @@ impl App {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Global key handling
-    // -----------------------------------------------------------------------
-
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<()> {
         if let Event::Key(key) = event {
             if key.kind != KeyEventKind::Press {
                 return Ok(());
             }
 
-            // Delegate to mode-specific handlers
             match &self.input_mode.clone() {
                 InputMode::Normal => self.handle_normal(key.code, key.modifiers),
                 InputMode::ActionPicker => self.handle_action_picker(key.code),
@@ -171,27 +152,21 @@ impl App {
 
     fn handle_normal(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         match code {
-            // Quit
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.should_quit = true;
             }
-            // Toggle help
             KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
             }
-            // Save
             KeyCode::Char('s') => {
                 self.save_config();
             }
-            // Apply to device
             KeyCode::Char('a') => {
                 self.apply_to_device();
             }
-            // Reset current tab
             KeyCode::Char('r') => {
                 self.reset_tab();
             }
-            // Tab cycling
             KeyCode::Tab => {
                 let next = (self.active_tab.index() + 1) % 4;
                 self.active_tab = Tab::from_index(next);
@@ -200,7 +175,6 @@ impl App {
                 let prev = (self.active_tab.index() + 3) % 4;
                 self.active_tab = Tab::from_index(prev);
             }
-            // Delegate remaining keys to active tab
             _ => self.handle_tab_key(code, modifiers),
         }
     }
@@ -213,10 +187,6 @@ impl App {
             Tab::Dpi => self.handle_dpi_key(code),
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Buttons tab
-    // -----------------------------------------------------------------------
 
     fn handle_buttons_key(&mut self, code: KeyCode) {
         const BUTTON_COUNT: usize = 4;
@@ -364,10 +334,6 @@ impl App {
         self.dirty = true;
     }
 
-    // -----------------------------------------------------------------------
-    // Scroll tab
-    // -----------------------------------------------------------------------
-
     fn handle_scroll_key(&mut self, code: KeyCode) {
         const ROW_COUNT: usize = 3;
         match code {
@@ -423,10 +389,6 @@ impl App {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Thumb wheel tab
-    // -----------------------------------------------------------------------
-
     fn handle_thumb_key(&mut self, code: KeyCode) {
         const ROW_COUNT: usize = 2;
         match code {
@@ -461,10 +423,6 @@ impl App {
             _ => {}
         }
     }
-
-    // -----------------------------------------------------------------------
-    // DPI tab
-    // -----------------------------------------------------------------------
 
     fn handle_dpi_key(&mut self, code: KeyCode) {
         let profile_count = self.config.dpi.profiles.len();
@@ -519,10 +477,6 @@ impl App {
             _ => {}
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Device / config operations
-    // -----------------------------------------------------------------------
 
     pub fn apply_to_device(&mut self) {
         if self.applying {
@@ -606,10 +560,6 @@ impl App {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Battery via sysfs (reliable on BT — no HID++ needed)
-// ---------------------------------------------------------------------------
-
 fn read_battery_sysfs() -> anyhow::Result<BatteryStatus> {
     for entry in std::fs::read_dir("/sys/class/power_supply")? {
         let path = entry?.path();
@@ -627,10 +577,6 @@ fn read_battery_sysfs() -> anyhow::Result<BatteryStatus> {
     }
     anyhow::bail!("no hidpp_battery found in /sys/class/power_supply")
 }
-
-// ---------------------------------------------------------------------------
-// Free function: apply config to device (avoids borrow conflicts)
-// ---------------------------------------------------------------------------
 
 fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), HidError> {
     // HID++ commands may silently fail over BT (kernel driver intercepts responses).
@@ -663,10 +609,6 @@ fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), Hid
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Event loop
-// ---------------------------------------------------------------------------
-
 /// Run the ratatui event loop until the user quits.
 pub async fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
@@ -676,8 +618,6 @@ pub async fn run_app<B: Backend>(
     shared_config: Arc<RwLock<Config>>,
 ) -> anyhow::Result<()> {
     let mut app = App::new(cfg, device, device_name, shared_config);
-
-    // Initial battery read
     app.refresh_battery();
 
     loop {

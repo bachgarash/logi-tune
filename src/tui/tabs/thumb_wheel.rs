@@ -10,10 +10,6 @@ use ratatui::{
 
 use crate::tui::app::App;
 
-// ---------------------------------------------------------------------------
-// render
-// ---------------------------------------------------------------------------
-
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
@@ -30,10 +26,6 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let paragraph = Paragraph::new(rows);
     f.render_widget(paragraph, inner);
 }
-
-// ---------------------------------------------------------------------------
-// Row renderers
-// ---------------------------------------------------------------------------
 
 fn selected_style(selected: bool) -> Style {
     if selected {

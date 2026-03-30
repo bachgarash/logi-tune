@@ -22,10 +22,6 @@ fn wait_readable(file: &File, timeout_ms: i32) -> bool {
 /// Must be non-zero; 0x01 is the conventional value used by third-party tools.
 const SW_ID: u8 = 0x01;
 
-// ---------------------------------------------------------------------------
-// Short report (7 bytes)
-// ---------------------------------------------------------------------------
-
 /// Send a 7-byte short HID++ report and read back a 7-byte response.
 pub fn send_short(
     file: &mut File,
@@ -67,10 +63,6 @@ pub fn send_short(
     Ok(response)
 }
 
-// ---------------------------------------------------------------------------
-// Long report (20 bytes)
-// ---------------------------------------------------------------------------
-
 /// Send a 20-byte long HID++ report and read back a 20-byte response.
 pub fn send_long(
     file: &mut File,
@@ -104,10 +96,6 @@ pub fn send_long(
     check_long_error(&response)?;
     Ok(response)
 }
-
-// ---------------------------------------------------------------------------
-// Error checking
-// ---------------------------------------------------------------------------
 
 /// Check a short response for a HID++ error report (feature_index == 0x8f).
 fn check_short_error(response: &[u8; 7]) -> Result<(), HidError> {

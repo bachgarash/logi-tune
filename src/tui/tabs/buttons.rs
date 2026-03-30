@@ -11,10 +11,6 @@ use ratatui::{
 use crate::config::ButtonAction;
 use crate::tui::app::{App, InputMode};
 
-// ---------------------------------------------------------------------------
-// Button metadata
-// ---------------------------------------------------------------------------
-
 const BUTTON_NAMES: [&str; 4] = [
     "Middle Click",
     "Back",
@@ -43,10 +39,6 @@ const ACTION_NAMES: [&str; 8] = [
     "8. Smart Combo (app-aware) …",
 ];
 
-// ---------------------------------------------------------------------------
-// render
-// ---------------------------------------------------------------------------
-
 pub fn render(f: &mut Frame, app: &mut App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
@@ -54,7 +46,6 @@ pub fn render(f: &mut Frame, app: &mut App, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    // Build button list items
     let items: Vec<ListItem> = BUTTON_NAMES
         .iter()
         .enumerate()
@@ -88,7 +79,6 @@ pub fn render(f: &mut Frame, app: &mut App, area: Rect) {
 
     f.render_stateful_widget(list, inner, &mut list_state);
 
-    // Overlays
     match &app.input_mode.clone() {
         InputMode::ActionPicker => render_action_picker(f, app, area),
         InputMode::TextInput { prompt, buffer } => {
@@ -97,10 +87,6 @@ pub fn render(f: &mut Frame, app: &mut App, area: Rect) {
         InputMode::Normal => {}
     }
 }
-
-// ---------------------------------------------------------------------------
-// Action picker popup
-// ---------------------------------------------------------------------------
 
 fn render_action_picker(f: &mut Frame, app: &App, parent: Rect) {
     let popup_width = 36u16.min(parent.width.saturating_sub(4));
@@ -142,10 +128,6 @@ fn render_action_picker(f: &mut Frame, app: &App, parent: Rect) {
     );
     f.render_stateful_widget(list, inner, &mut list_state);
 }
-
-// ---------------------------------------------------------------------------
-// Text input popup
-// ---------------------------------------------------------------------------
 
 fn render_text_input(f: &mut Frame, prompt: &str, buffer: &str, parent: Rect) {
     let popup_width = 50u16.min(parent.width.saturating_sub(4));

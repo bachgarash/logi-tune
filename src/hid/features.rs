@@ -5,10 +5,6 @@ use crate::config::ButtonAction;
 use super::{DeviceModel, HidError, MxMaster};
 use super::protocol::{send_long, send_short};
 
-// ---------------------------------------------------------------------------
-// Feature numbers
-// ---------------------------------------------------------------------------
-
 const FEATURE_ROOT: u16 = 0x0000;
 pub const FEATURE_REPROG_CONTROLS_V4: u16 = 0x1b04;
 #[allow(dead_code)]
@@ -17,10 +13,6 @@ const FEATURE_SMART_SHIFT: u16 = 0x2100;
 const FEATURE_HI_RES_SCROLLING: u16 = 0x2120;
 const FEATURE_THUMB_WHEEL: u16 = 0x2150;
 const FEATURE_ADJUSTABLE_DPI: u16 = 0x2201;
-
-// ---------------------------------------------------------------------------
-// Feature index resolution
-// ---------------------------------------------------------------------------
 
 /// Resolve a HID++ 2.0 feature number to its runtime index on this device.
 pub fn get_feature_index(device: &mut MxMaster, feature_number: u16) -> Result<u8, HidError> {
@@ -44,10 +36,6 @@ pub fn get_feature_index(device: &mut MxMaster, feature_number: u16) -> Result<u
     }
     Ok(index)
 }
-
-// ---------------------------------------------------------------------------
-// Feature setters
-// ---------------------------------------------------------------------------
 
 /// Set the active DPI via ADJUSTABLE_DPI (0x2201), function 0x03 (setDpiForSensor).
 pub fn set_dpi(device: &mut MxMaster, dpi: u16) -> Result<(), HidError> {
@@ -146,10 +134,6 @@ pub fn remap_button(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Battery
-// ---------------------------------------------------------------------------
-
 /// Battery level and charging state from the UNIFIED_BATTERY feature.
 pub struct BatteryStatus {
     /// Charge level 0–100. `None` if the device could not report it.
@@ -170,10 +154,6 @@ pub fn get_battery_status(device: &mut MxMaster) -> Result<BatteryStatus, HidErr
     let charge_complete = response[5] == 2;
     Ok(BatteryStatus { level, charging, charge_complete })
 }
-
-// ---------------------------------------------------------------------------
-// ButtonLayout
-// ---------------------------------------------------------------------------
 
 /// Control IDs for all remappable buttons on a given model.
 #[derive(Clone, Copy)]

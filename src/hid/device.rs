@@ -4,10 +4,6 @@ use std::fs::{File, OpenOptions};
 
 use super::{DeviceModel, HidError, SUPPORTED_DEVICES};
 
-// ---------------------------------------------------------------------------
-// MxMaster
-// ---------------------------------------------------------------------------
-
 /// An open handle to a Logitech MX series mouse via hidraw.
 pub struct MxMaster {
     pub(crate) file: File,
@@ -28,7 +24,6 @@ impl MxMaster {
             let dev_path = format!("/dev/hidraw{}", n);
             let uevent_path = format!("/sys/class/hidraw/hidraw{}/device/uevent", n);
 
-            // Read the uevent file to extract HID_ID
             let uevent = match std::fs::read_to_string(&uevent_path) {
                 Ok(s) => s,
                 Err(_) => continue,
@@ -39,7 +34,6 @@ impl MxMaster {
                 None => continue,
             };
 
-            // Look up in the supported devices table
             let model = match SUPPORTED_DEVICES
                 .iter()
                 .find(|(v, p, _)| *v == vid && *p == pid)
@@ -49,7 +43,6 @@ impl MxMaster {
                 None => continue,
             };
 
-            // Try to open the device
             let file = match OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -80,10 +73,6 @@ impl MxMaster {
         Err(HidError::NotFound)
     }
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Parse the `HID_ID=BUS:VID:PID` line from a uevent file.
 ///

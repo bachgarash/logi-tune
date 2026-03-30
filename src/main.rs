@@ -22,10 +22,8 @@ async fn main() -> anyhow::Result<()> {
 
     let daemon_mode = std::env::args().any(|a| a == "--daemon");
 
-    // Load config (falls back to Default if the file is absent)
     let cfg = config::Config::load()?;
 
-    // Attempt to open the device
     let raw_device = match hid::MxMaster::open() {
         Ok(d) => {
             tracing::info!("Opened device: {}", d.model.display_name());
@@ -46,14 +44,11 @@ async fn main() -> anyhow::Result<()> {
         .map(|d| d.model.display_name())
         .unwrap_or("No device");
 
-    // Shared config used by the background monitor task
     let shared_config = Arc::new(RwLock::new(cfg.clone()));
 
-    // Wrap device in Arc<Mutex> so the TUI can hand it to async apply tasks
     let device: Option<Arc<Mutex<hid::MxMaster>>> = raw_device.map(|d| {
-        // Start the evdev button monitor (avoids the kernel HID++ driver interception issue).
-        // We create both uinput devices BEFORE grabbing the physical device so the compositor
-        // has time to discover the virtual mouse before we take exclusive ownership.
+        // Create uinput devices before grabbing the physical device so the compositor
+        // discovers the virtual mouse before we take exclusive ownership.
         let path = d.path.clone();
         match (
             input::UinputKeyboard::new(),
@@ -81,10 +76,6 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Daemon mode: block forever, reloading config from disk when it changes
-// ---------------------------------------------------------------------------
-
 async fn run_daemon(shared_config: Arc<RwLock<config::Config>>) -> anyhow::Result<()> {
     let config_path = config::Config::path();
     let mut last_modified = std::fs::metadata(&config_path)
@@ -111,10 +102,6 @@ async fn run_daemon(shared_config: Arc<RwLock<config::Config>>) -> anyhow::Resul
     }
 }
 
-// ---------------------------------------------------------------------------
-// Background monitor loop
-// ---------------------------------------------------------------------------
-
 fn run_monitor(
     mut monitor: hid::monitor::DeviceMonitor,
     shared_config: Arc<RwLock<config::Config>>,
@@ -130,7 +117,6 @@ fn run_monitor(
             }
         };
 
-        // Only intercept EV_KEY press events for mapped buttons.
         let action = if ev.ev_type == 1 && ev.value == 1 {
             tracing::info!(code = ev.code, "evdev button press");
             let cfg = shared_config.read().unwrap();
@@ -141,14 +127,11 @@ fn run_monitor(
 
         match action {
             Some(action) => {
-                // We're handling this button — swallow the original event and
-                // inject the configured action. Send a SYN on the virtual mouse
-                // so the compositor doesn't see a stale state.
+                // Swallow the event; send SYN so the compositor sees a clean state.
                 let _ = mouse.write_event(0, 0, 0); // EV_SYN
                 perform_action(&action, &mut keyboard);
             }
             None => {
-                // Pass the event through the virtual mouse unchanged.
                 if let Err(e) = mouse.write_event(ev.ev_type, ev.code, ev.value) {
                     tracing::error!("Mouse pass-through failed: {e}");
                 }

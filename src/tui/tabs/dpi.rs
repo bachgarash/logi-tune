@@ -10,10 +10,6 @@ use ratatui::{
 
 use crate::tui::app::App;
 
-// ---------------------------------------------------------------------------
-// render
-// ---------------------------------------------------------------------------
-
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let outer_block = Block::default()
         .borders(Borders::ALL)
@@ -22,6 +18,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(outer_block, area);
 
     // Split: left = profile list, right = bar chart
+    // Split: left = profile list, right = bar chart
     let columns = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
@@ -29,15 +26,8 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
     render_profile_list(f, app, columns[0]);
     render_bar_chart(f, app, columns[1]);
-
-    // Keybinding hints below — we put them in the bottom line of the inner area
-    // by splitting the inner area vertically
     render_hints(f, inner);
 }
-
-// ---------------------------------------------------------------------------
-// Profile list
-// ---------------------------------------------------------------------------
 
 fn render_profile_list(f: &mut Frame, app: &App, area: Rect) {
     // Reserve last 2 rows for hints
@@ -72,10 +62,6 @@ fn render_profile_list(f: &mut Frame, app: &App, area: Rect) {
     let paragraph = Paragraph::new(lines).block(Block::default().title("Profiles"));
     f.render_widget(paragraph, list_area);
 }
-
-// ---------------------------------------------------------------------------
-// Bar chart (text-based, Unicode blocks)
-// ---------------------------------------------------------------------------
 
 fn render_bar_chart(f: &mut Frame, app: &App, area: Rect) {
     const MAX_DPI: u16 = 8000;
@@ -115,10 +101,6 @@ fn render_bar_chart(f: &mut Frame, app: &App, area: Rect) {
     let paragraph = Paragraph::new(lines);
     f.render_widget(paragraph, area);
 }
-
-// ---------------------------------------------------------------------------
-// Hint line
-// ---------------------------------------------------------------------------
 
 fn render_hints(f: &mut Frame, area: Rect) {
     if area.height < 2 {

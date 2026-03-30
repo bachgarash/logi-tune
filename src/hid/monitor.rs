@@ -55,8 +55,6 @@ impl DeviceMonitor {
                 }
             })?;
 
-        // Grab exclusively so the original events don't reach apps.
-        // This prevents double-action when we remap a button to a key combo.
         match unsafe { eviocgrab(file.as_raw_fd(), 1) } {
             Ok(_) => tracing::info!("evdev exclusive grab acquired"),
             Err(e) => tracing::warn!("evdev grab failed (pass-through may double-fire): {e}"),
