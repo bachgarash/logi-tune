@@ -21,7 +21,12 @@ pub mod ui;
 use app::run_app;
 
 /// Initialise the terminal and run the interactive TUI.
-pub async fn run(cfg: Config, device: Option<Arc<Mutex<MxMaster>>>, device_name: &'static str, shared_config: Arc<RwLock<Config>>) -> anyhow::Result<()> {
+pub async fn run(
+    cfg: Config,
+    device: Option<Arc<Mutex<MxMaster>>>,
+    device_name: &'static str,
+    shared_config: Arc<RwLock<Config>>,
+) -> anyhow::Result<()> {
     enable_raw_mode().context("enabling raw mode")?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen).context("entering alternate screen")?;
@@ -41,8 +46,7 @@ pub async fn run(cfg: Config, device: Option<Arc<Mutex<MxMaster>>>, device_name:
     let result = run_app(&mut terminal, cfg, device, device_name, shared_config).await;
 
     disable_raw_mode().context("disabling raw mode")?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)
-        .context("leaving alternate screen")?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen).context("leaving alternate screen")?;
     terminal.show_cursor().context("showing cursor")?;
 
     result
