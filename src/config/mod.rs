@@ -7,24 +7,22 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 /// The action assigned to a mouse button.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub enum ButtonAction {
+    #[default]
     Default,
     KeyCombo(String),
     /// Context-aware combo: uses `terminal` when the focused window is a
     /// terminal emulator, `default` otherwise.
-    ContextCombo { default: String, terminal: String },
+    ContextCombo {
+        default: String,
+        terminal: String,
+    },
     Exec(String),
     ToggleScrollMode,
     DpiUp,
     DpiDown,
     Disabled,
-}
-
-impl Default for ButtonAction {
-    fn default() -> Self {
-        ButtonAction::Default
-    }
 }
 
 impl fmt::Display for ButtonAction {
@@ -132,24 +130,13 @@ impl Default for DpiConfig {
 }
 
 /// Root configuration struct.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub buttons: ButtonConfig,
     pub scroll: ScrollConfig,
     pub thumb_wheel: ThumbWheelConfig,
     pub dpi: DpiConfig,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            buttons: ButtonConfig::default(),
-            scroll: ScrollConfig::default(),
-            thumb_wheel: ThumbWheelConfig::default(),
-            dpi: DpiConfig::default(),
-        }
-    }
 }
 
 impl Config {

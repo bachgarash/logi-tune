@@ -11,12 +11,7 @@ use ratatui::{
 use crate::config::ButtonAction;
 use crate::tui::app::{App, InputMode};
 
-const BUTTON_NAMES: [&str; 4] = [
-    "Middle Click",
-    "Back",
-    "Forward",
-    "Thumb Button",
-];
+const BUTTON_NAMES: [&str; 4] = ["Middle Click", "Back", "Forward", "Thumb Button"];
 
 fn button_action(app: &App, idx: usize) -> &ButtonAction {
     match idx {
@@ -40,9 +35,7 @@ const ACTION_NAMES: [&str; 8] = [
 ];
 
 pub fn render(f: &mut Frame, app: &mut App, area: Rect) {
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Buttons ");
+    let block = Block::default().borders(Borders::ALL).title(" Buttons ");
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -69,21 +62,17 @@ pub fn render(f: &mut Frame, app: &mut App, area: Rect) {
     let mut list_state = ListState::default();
     list_state.select(Some(app.button_selected));
 
-    let list = List::new(items)
-        .block(Block::default())
-        .highlight_style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        );
+    let list = List::new(items).block(Block::default()).highlight_style(
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    );
 
     f.render_stateful_widget(list, inner, &mut list_state);
 
     match &app.input_mode.clone() {
         InputMode::ActionPicker => render_action_picker(f, app, area),
-        InputMode::TextInput { prompt, buffer } => {
-            render_text_input(f, prompt, buffer, area)
-        }
+        InputMode::TextInput { prompt, buffer } => render_text_input(f, prompt, buffer, area),
         InputMode::Normal => {}
     }
 }
@@ -138,17 +127,12 @@ fn render_text_input(f: &mut Frame, prompt: &str, buffer: &str, parent: Rect) {
 
     f.render_widget(Clear, popup_area);
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Input ");
+    let block = Block::default().borders(Borders::ALL).title(" Input ");
     let inner = block.inner(popup_area);
     f.render_widget(block, popup_area);
 
     let text = vec![
-        Line::from(Span::styled(
-            prompt,
-            Style::default().fg(Color::DarkGray),
-        )),
+        Line::from(Span::styled(prompt, Style::default().fg(Color::DarkGray))),
         Line::from(Span::styled(
             format!("> {}█", buffer),
             Style::default().fg(Color::White),

@@ -37,20 +37,20 @@ pub fn render(f: &mut Frame, app: &mut App) {
 fn render_title(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let title_text = format!(" logi-tune v0.1.0 — {}", app.device_name);
     let battery_text = format_battery(app);
-    let battery_width = battery_text.iter().map(|s| s.content.len() as u16).sum::<u16>();
+    let battery_width = battery_text
+        .iter()
+        .map(|s| s.content.len() as u16)
+        .sum::<u16>();
 
-    let [left, right] = Layout::horizontal([
-        Constraint::Min(0),
-        Constraint::Length(battery_width + 1),
-    ])
-    .areas(area);
+    let [left, right] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(battery_width + 1)]).areas(area);
 
-    let title_para = Paragraph::new(title_text)
-        .style(Style::default().fg(Color::White).bg(Color::DarkGray));
+    let title_para =
+        Paragraph::new(title_text).style(Style::default().fg(Color::White).bg(Color::DarkGray));
     f.render_widget(title_para, left);
 
-    let battery_para = Paragraph::new(Line::from(battery_text))
-        .style(Style::default().bg(Color::DarkGray));
+    let battery_para =
+        Paragraph::new(Line::from(battery_text)).style(Style::default().bg(Color::DarkGray));
     f.render_widget(battery_para, right);
 }
 
@@ -130,7 +130,9 @@ fn render_status(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         let frame = SPINNER[(app.tick as usize / 2) % SPINNER.len()];
         spans.push(Span::styled(
             format!(" {} Applying… ", frame),
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         ));
     } else if let Some(ref msg) = app.status {
         spans.push(Span::raw(format!(" {} ", msg)));

@@ -2,8 +2,8 @@
 
 use crate::config::ButtonAction;
 
-use super::{DeviceModel, HidError, MxMaster};
 use super::protocol::{send_long, send_short};
+use super::{DeviceModel, HidError, MxMaster};
 
 const FEATURE_ROOT: u16 = 0x0000;
 pub const FEATURE_REPROG_CONTROLS_V4: u16 = 0x1b04;
@@ -149,10 +149,18 @@ pub fn get_battery_status(device: &mut MxMaster) -> Result<BatteryStatus, HidErr
     let response = send_short(&mut device.file, device.device_index, fi, 0x01, [0, 0, 0])?;
     // response[4] = level (0-100, 255 = unknown)
     // response[5] = charging status: 0=discharging 1=recharging 2=complete 3=error
-    let level = if response[4] <= 100 { Some(response[4]) } else { None };
+    let level = if response[4] <= 100 {
+        Some(response[4])
+    } else {
+        None
+    };
     let charging = response[5] == 1 || response[5] == 4; // recharging or slow charge
     let charge_complete = response[5] == 2;
-    Ok(BatteryStatus { level, charging, charge_complete })
+    Ok(BatteryStatus {
+        level,
+        charging,
+        charge_complete,
+    })
 }
 
 /// Control IDs for all remappable buttons on a given model.

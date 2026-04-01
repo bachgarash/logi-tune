@@ -48,7 +48,9 @@ fn render_profile_list(f: &mut Frame, app: &App, area: Rect) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD)
         } else if is_active {
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::Gray)
         };
@@ -87,7 +89,9 @@ fn render_bar_chart(f: &mut Frame, app: &App, area: Rect) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD)
         } else if is_active {
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::Gray)
         };
@@ -113,9 +117,6 @@ fn render_hints(f: &mut Frame, area: Rect) {
     };
 
     let hint = " ↑↓ select  ←→ adjust DPI  Enter set active  + add  - remove";
-    let paragraph = Paragraph::new(Span::styled(
-        hint,
-        Style::default().fg(Color::DarkGray),
-    ));
+    let paragraph = Paragraph::new(Span::styled(hint, Style::default().fg(Color::DarkGray)));
     f.render_widget(paragraph, hint_area);
 }

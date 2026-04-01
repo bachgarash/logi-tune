@@ -12,11 +12,17 @@ use super::{HidError, REPORT_ID_LONG, REPORT_ID_SHORT};
 /// Returns `false` if the timeout expires with no data available.
 fn wait_readable(file: &File, timeout_ms: i32) -> bool {
     let fd = file.as_raw_fd();
-    let mut fds = [PollFd::new(unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) }, PollFlags::POLLIN)];
-    nix::poll::poll(&mut fds, nix::poll::PollTimeout::try_from(timeout_ms).unwrap_or(nix::poll::PollTimeout::ZERO))
-        .unwrap_or(0) > 0
+    let mut fds = [PollFd::new(
+        unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) },
+        PollFlags::POLLIN,
+    )];
+    nix::poll::poll(
+        &mut fds,
+        nix::poll::PollTimeout::try_from(timeout_ms).unwrap_or(nix::poll::PollTimeout::ZERO),
+    )
+    .unwrap_or(0)
+        > 0
 }
-
 
 /// Software ID embedded in every report (used to correlate responses).
 /// Must be non-zero; 0x01 is the conventional value used by third-party tools.
@@ -52,7 +58,7 @@ pub fn send_short(
         if !wait_readable(file, 200) {
             return Err(HidError::Protocol(0xff)); // timeout
         }
-        file.read(&mut response)?;
+        file.read_exact(&mut response)?;
         tracing::debug!(rx = ?response, "send_short rx");
         if response[0] == REPORT_ID_SHORT || response[0] == REPORT_ID_LONG {
             break;
@@ -86,7 +92,7 @@ pub fn send_long(
         if !wait_readable(file, 200) {
             return Err(HidError::Protocol(0xff)); // timeout
         }
-        file.read(&mut response)?;
+        file.read_exact(&mut response)?;
         tracing::debug!(rx = ?response, "send_long rx");
         if response[0] == REPORT_ID_SHORT || response[0] == REPORT_ID_LONG {
             break;

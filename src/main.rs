@@ -37,7 +37,9 @@ async fn main() -> anyhow::Result<()> {
             None
         }
         Err(e @ hid::HidError::Permission { .. }) => {
-            return Err(anyhow::anyhow!("{e}\n\nInstall the udev rule in udev/99-mx-master.rules and reload."));
+            return Err(anyhow::anyhow!(
+                "{e}\n\nInstall the udev rule in udev/99-mx-master.rules and reload."
+            ));
         }
         Err(e) => return Err(anyhow::anyhow!("Failed to open device: {e}")),
     };
@@ -144,16 +146,13 @@ fn run_monitor(
 }
 
 /// Map evdev key codes to button actions for the MX Master series.
-fn action_for_evdev_code(
-    code: u16,
-    cfg: &config::Config,
-) -> Option<config::ButtonAction> {
+fn action_for_evdev_code(code: u16, cfg: &config::Config) -> Option<config::ButtonAction> {
     // MX Master 3S For Mac (BT): confirmed codes
     let action = match code {
-        274 => &cfg.buttons.middle_button,   // scroll wheel click
-        275 => &cfg.buttons.back_button,     // back button
-        276 => &cfg.buttons.forward_button,  // forward button
-        277 => &cfg.buttons.thumb_button,    // thumb/gesture button
+        274 => &cfg.buttons.middle_button,  // scroll wheel click
+        275 => &cfg.buttons.back_button,    // back button
+        276 => &cfg.buttons.forward_button, // forward button
+        277 => &cfg.buttons.thumb_button,   // thumb/gesture button
         _ => return None,
     };
     match action {
@@ -172,7 +171,11 @@ fn perform_action(action: &config::ButtonAction, uinput: &mut input::UinputKeybo
             }
         }
         config::ButtonAction::ContextCombo { default, terminal } => {
-            let combo = if active_window_is_terminal() { terminal } else { default };
+            let combo = if active_window_is_terminal() {
+                terminal
+            } else {
+                default
+            };
             tracing::debug!(combo, "injecting context combo");
             if let Err(e) = uinput.inject_combo(combo) {
                 tracing::error!("Key injection failed: {e}");
@@ -322,9 +325,21 @@ fn spawn_focus_tracker() {
 
 fn is_terminal_class(s: &str) -> bool {
     const TERMINALS: &[&str] = &[
-        "alacritty", "kitty", "gnome-terminal", "tilix", "konsole",
-        "xterm", "wezterm", "foot", "st", "urxvt", "terminator",
-        "mate-terminal", "xfce4-terminal", "terminal", "ghostty",
+        "alacritty",
+        "kitty",
+        "gnome-terminal",
+        "tilix",
+        "konsole",
+        "xterm",
+        "wezterm",
+        "foot",
+        "st",
+        "urxvt",
+        "terminator",
+        "mate-terminal",
+        "xfce4-terminal",
+        "terminal",
+        "ghostty",
     ];
     TERMINALS.iter().any(|t| s.contains(t))
 }

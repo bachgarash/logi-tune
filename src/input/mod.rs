@@ -65,7 +65,12 @@ impl UinputKeyboard {
                 let _ = ui_set_keybit(fd, code as u64);
             }
             let mut setup = UinputSetup {
-                id: InputId { bustype: BUS_VIRTUAL, vendor: 0, product: 0, version: 1 },
+                id: InputId {
+                    bustype: BUS_VIRTUAL,
+                    vendor: 0,
+                    product: 0,
+                    version: 1,
+                },
                 name: [0u8; 80],
                 ff_effects_max: 0,
             };
@@ -107,7 +112,13 @@ impl UinputKeyboard {
     }
 
     fn write_event(&mut self, type_: u16, code: u16, value: i32) -> Result<()> {
-        let ev = InputEvent { sec: 0, usec: 0, type_, code, value };
+        let ev = InputEvent {
+            sec: 0,
+            usec: 0,
+            type_,
+            code,
+            value,
+        };
         let bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
                 &ev as *const InputEvent as *const u8,
@@ -164,7 +175,12 @@ impl UinputMouse {
             ui_set_mscbit(fd, 4u64).context("UI_SET_MSCBIT")?;
 
             let mut setup = UinputSetup {
-                id: InputId { bustype: BUS_VIRTUAL, vendor: 0, product: 0, version: 1 },
+                id: InputId {
+                    bustype: BUS_VIRTUAL,
+                    vendor: 0,
+                    product: 0,
+                    version: 1,
+                },
                 name: [0u8; 80],
                 ff_effects_max: 0,
             };
@@ -180,14 +196,22 @@ impl UinputMouse {
     }
 
     pub fn write_event(&mut self, ev_type: u16, code: u16, value: i32) -> Result<()> {
-        let ev = InputEvent { sec: 0, usec: 0, type_: ev_type, code, value };
+        let ev = InputEvent {
+            sec: 0,
+            usec: 0,
+            type_: ev_type,
+            code,
+            value,
+        };
         let bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
                 &ev as *const InputEvent as *const u8,
                 std::mem::size_of::<InputEvent>(),
             )
         };
-        self.file.write_all(bytes).context("write to virtual mouse")?;
+        self.file
+            .write_all(bytes)
+            .context("write to virtual mouse")?;
         Ok(())
     }
 }
@@ -223,9 +247,18 @@ fn key_name_to_code(name: &str) -> Option<u16> {
         "end" => Some(107),
         "pageup" | "pgup" => Some(104),
         "pagedown" | "pgdn" => Some(109),
-        "f1" => Some(59), "f2" => Some(60), "f3" => Some(61), "f4" => Some(62),
-        "f5" => Some(63), "f6" => Some(64), "f7" => Some(65), "f8" => Some(66),
-        "f9" => Some(67), "f10" => Some(68), "f11" => Some(87), "f12" => Some(88),
+        "f1" => Some(59),
+        "f2" => Some(60),
+        "f3" => Some(61),
+        "f4" => Some(62),
+        "f5" => Some(63),
+        "f6" => Some(64),
+        "f7" => Some(65),
+        "f8" => Some(66),
+        "f9" => Some(67),
+        "f10" => Some(68),
+        "f11" => Some(87),
+        "f12" => Some(88),
         s if s.len() == 1 => char_to_key_code(s.chars().next()?),
         _ => None,
     }
@@ -233,13 +266,42 @@ fn key_name_to_code(name: &str) -> Option<u16> {
 
 fn char_to_key_code(c: char) -> Option<u16> {
     Some(match c {
-        'a' => 30, 'b' => 48, 'c' => 46, 'd' => 32, 'e' => 18, 'f' => 33,
-        'g' => 34, 'h' => 35, 'i' => 23, 'j' => 36, 'k' => 37, 'l' => 38,
-        'm' => 50, 'n' => 49, 'o' => 24, 'p' => 25, 'q' => 16, 'r' => 19,
-        's' => 31, 't' => 20, 'u' => 22, 'v' => 47, 'w' => 17, 'x' => 45,
-        'y' => 21, 'z' => 44,
-        '0' => 11, '1' => 2,  '2' => 3,  '3' => 4,  '4' => 5,  '5' => 6,
-        '6' => 7,  '7' => 8,  '8' => 9,  '9' => 10,
+        'a' => 30,
+        'b' => 48,
+        'c' => 46,
+        'd' => 32,
+        'e' => 18,
+        'f' => 33,
+        'g' => 34,
+        'h' => 35,
+        'i' => 23,
+        'j' => 36,
+        'k' => 37,
+        'l' => 38,
+        'm' => 50,
+        'n' => 49,
+        'o' => 24,
+        'p' => 25,
+        'q' => 16,
+        'r' => 19,
+        's' => 31,
+        't' => 20,
+        'u' => 22,
+        'v' => 47,
+        'w' => 17,
+        'x' => 45,
+        'y' => 21,
+        'z' => 44,
+        '0' => 11,
+        '1' => 2,
+        '2' => 3,
+        '3' => 4,
+        '4' => 5,
+        '5' => 6,
+        '6' => 7,
+        '7' => 8,
+        '8' => 9,
+        '9' => 10,
         _ => return None,
     })
 }

@@ -52,7 +52,11 @@ fn render_lines_per_notch(app: &App) -> Line<'static> {
 fn render_invert(app: &App) -> Line<'static> {
     let selected = app.scroll_selected == 1;
     let style = selected_style(selected);
-    let state = if app.config.scroll.invert { "ON " } else { "OFF" };
+    let state = if app.config.scroll.invert {
+        "ON "
+    } else {
+        "OFF"
+    };
     let label = format!("  Invert scroll:     {}        Space toggle", state);
     Line::from(Span::styled(label, style))
 }

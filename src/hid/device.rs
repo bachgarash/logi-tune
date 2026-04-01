@@ -43,11 +43,7 @@ impl MxMaster {
                 None => continue,
             };
 
-            let file = match OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&dev_path)
-            {
+            let file = match OpenOptions::new().read(true).write(true).open(&dev_path) {
                 Ok(f) => f,
                 Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
                     return Err(HidError::Permission { path: dev_path });

@@ -49,7 +49,9 @@ impl DeviceMonitor {
             .open(&event_path)
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    HidError::Permission { path: event_path.clone() }
+                    HidError::Permission {
+                        path: event_path.clone(),
+                    }
                 } else {
                     HidError::Io(e)
                 }
@@ -70,16 +72,22 @@ impl DeviceMonitor {
         self.file.read_exact(&mut buf)?;
 
         let ev_type = u16::from_le_bytes([buf[16], buf[17]]);
-        let code    = u16::from_le_bytes([buf[18], buf[19]]);
-        let value   = i32::from_le_bytes([buf[20], buf[21], buf[22], buf[23]]);
+        let code = u16::from_le_bytes([buf[18], buf[19]]);
+        let value = i32::from_le_bytes([buf[20], buf[21], buf[22], buf[23]]);
 
-        Ok(RawEvent { ev_type, code, value })
+        Ok(RawEvent {
+            ev_type,
+            code,
+            value,
+        })
     }
 }
 
 impl Drop for DeviceMonitor {
     fn drop(&mut self) {
-        unsafe { let _ = eviocgrab(self.file.as_raw_fd(), 0); }
+        unsafe {
+            let _ = eviocgrab(self.file.as_raw_fd(), 0);
+        }
     }
 }
 

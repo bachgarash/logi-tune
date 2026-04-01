@@ -9,12 +9,11 @@ use tokio::sync::oneshot;
 
 use crate::config::Config;
 use crate::hid::{
-    MxMaster,
+    HidError, MxMaster,
     features::{
         BatteryStatus, button_layout, remap_button, set_dpi, set_hi_res_scroll, set_smart_shift,
         set_thumb_wheel,
     },
-    HidError,
 };
 
 use super::ui::render;
@@ -372,9 +371,8 @@ impl App {
                         }
                     }
                     2 => {
-                        if self.config.scroll.smart_shift_threshold < 255 {
-                            self.config.scroll.smart_shift_threshold += 1;
-                        }
+                        self.config.scroll.smart_shift_threshold =
+                            self.config.scroll.smart_shift_threshold.saturating_add(1);
                     }
                     _ => {}
                 }
@@ -468,8 +466,7 @@ impl App {
                         self.dpi_selected = self.config.dpi.profiles.len().saturating_sub(1);
                     }
                     if self.config.dpi.active >= self.config.dpi.profiles.len() {
-                        self.config.dpi.active =
-                            self.config.dpi.profiles.len().saturating_sub(1);
+                        self.config.dpi.active = self.config.dpi.profiles.len().saturating_sub(1);
                     }
                     self.dirty = true;
                 }
@@ -504,7 +501,9 @@ impl App {
 
     /// Poll for a completed apply. Call once per event-loop tick.
     pub fn poll_apply(&mut self) {
-        let Some(rx) = self.apply_rx.as_mut() else { return };
+        let Some(rx) = self.apply_rx.as_mut() else {
+            return;
+        };
         match rx.try_recv() {
             Ok(Ok(cfg)) => {
                 *self.shared_config.write().unwrap() = cfg;
@@ -563,12 +562,20 @@ impl App {
 fn read_battery_sysfs() -> anyhow::Result<BatteryStatus> {
     for entry in std::fs::read_dir("/sys/class/power_supply")? {
         let path = entry?.path();
-        let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
         if !name.starts_with("hidpp_battery") {
             continue;
         }
-        let level: u8 = std::fs::read_to_string(path.join("capacity"))?.trim().parse()?;
-        let status = std::fs::read_to_string(path.join("status"))?.trim().to_lowercase();
+        let level: u8 = std::fs::read_to_string(path.join("capacity"))?
+            .trim()
+            .parse()?;
+        let status = std::fs::read_to_string(path.join("status"))?
+            .trim()
+            .to_lowercase();
         return Ok(BatteryStatus {
             level: Some(level),
             charging: status == "charging",
@@ -597,14 +604,34 @@ fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), Hid
     }
     hidpp!(set_smart_shift(device, cfg.scroll.smart_shift_threshold));
     hidpp!(set_hi_res_scroll(device, cfg.scroll.hi_res_multiplier));
-    hidpp!(set_thumb_wheel(device, cfg.thumb_wheel.invert, cfg.thumb_wheel.sensitivity));
+    hidpp!(set_thumb_wheel(
+        device,
+        cfg.thumb_wheel.invert,
+        cfg.thumb_wheel.sensitivity
+    ));
 
     let layout = button_layout(device.model);
-    hidpp!(remap_button(device, layout.gesture_button, &cfg.buttons.gesture_button));
-    hidpp!(remap_button(device, layout.thumb_button, &cfg.buttons.thumb_button));
+    hidpp!(remap_button(
+        device,
+        layout.gesture_button,
+        &cfg.buttons.gesture_button
+    ));
+    hidpp!(remap_button(
+        device,
+        layout.thumb_button,
+        &cfg.buttons.thumb_button
+    ));
     hidpp!(remap_button(device, layout.back, &cfg.buttons.back_button));
-    hidpp!(remap_button(device, layout.forward, &cfg.buttons.forward_button));
-    hidpp!(remap_button(device, layout.smart_shift, &cfg.buttons.smart_shift));
+    hidpp!(remap_button(
+        device,
+        layout.forward,
+        &cfg.buttons.forward_button
+    ));
+    hidpp!(remap_button(
+        device,
+        layout.smart_shift,
+        &cfg.buttons.smart_shift
+    ));
 
     Ok(())
 }
@@ -635,9 +662,7 @@ pub async fn run_app<B: Backend>(
             .draw(|f| render(f, &mut app))
             .context("drawing frame")?;
 
-        if event::poll(std::time::Duration::from_millis(100))
-            .context("polling for events")?
-        {
+        if event::poll(std::time::Duration::from_millis(100)).context("polling for events")? {
             let ev = event::read().context("reading event")?;
             app.handle_event(ev)?;
         }
