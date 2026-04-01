@@ -30,6 +30,9 @@ async fn main() -> anyhow::Result<()> {
             Some(d)
         }
         Err(hid::HidError::NotFound) => {
+            if daemon_mode {
+                return Err(anyhow::anyhow!("No supported device found — will retry"));
+            }
             tracing::warn!("No supported device found — running without device");
             None
         }
