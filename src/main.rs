@@ -252,42 +252,8 @@ def on_focus(event):
     except Exception:
         pass
 
-def on_deactivate(event):
-    """When a window deactivates, poll immediately to find the new active window.
-    Apps like Chrome don't register with AT-SPI2, so they never fire window:activate.
-    If nothing is found active after a deactivate, write 'unknown' so we don't
-    keep acting as if the previous terminal is still focused."""
-    try:
-        desktop = Atspi.get_desktop(0)
-        for i in range(desktop.get_child_count()):
-            app = desktop.get_child_at_index(i)
-            if app is None:
-                continue
-            try:
-                name = resolve_app_name(app)
-                if not name or name in SHELL_APPS:
-                    continue
-                for j in range(app.get_child_count()):
-                    win = app.get_child_at_index(j)
-                    if win is None:
-                        continue
-                    try:
-                        ss = win.get_state_set()
-                        if ss.contains(Atspi.StateType.ACTIVE):
-                            write_focus(name)
-                            return
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-        # No AT-SPI2 app is active — likely a non-AT-SPI2 app (e.g. Chrome) took focus.
-        write_focus('unknown')
-    except Exception:
-        pass
-
 def poll_active():
-    """Scan desktop for the active non-shell window. Falls back to 'unknown'
-    so a stale terminal name never persists when focus moves to Chrome etc."""
+    """Scan desktop for the active/focused non-shell window. Returns True if found."""
     try:
         desktop = Atspi.get_desktop(0)
         for i in range(desktop.get_child_count()):
@@ -304,33 +270,30 @@ def poll_active():
                         continue
                     try:
                         ss = win.get_state_set()
-                        if ss.contains(Atspi.StateType.ACTIVE):
+                        if ss.contains(Atspi.StateType.ACTIVE) or ss.contains(Atspi.StateType.FOCUSED):
                             write_focus(name)
-                            return
+                            return True
                     except Exception:
                         pass
             except Exception:
                 pass
     except Exception:
         pass
-    # Nothing active found — assume non-AT-SPI2 app has focus.
-    write_focus('unknown')
+    return False
 
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
 
 Atspi.init()
 
-listener_activate = Atspi.EventListener.new(on_focus)
-listener_activate.register('window:activate')
+listener = Atspi.EventListener.new(on_focus)
+listener.register('window:activate')
 
-listener_deactivate = Atspi.EventListener.new(on_deactivate)
-listener_deactivate.register('window:deactivate')
-
-# Poll every 3s as a fallback to keep the focus file fresh.
+# Poll every 3s continuously — AT-SPI2 events alone are not reliable for
+# apps like Chrome that don't emit window:activate by default.
 def poll_loop():
     poll_active()
-    return True
+    return True  # always reschedule
 
 poll_loop()
 GLib.timeout_add(3000, poll_loop)
