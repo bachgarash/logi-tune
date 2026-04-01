@@ -1,6 +1,6 @@
 # logi-tune
 
-A terminal UI for configuring Logitech MX Master mice on Linux — button remapping, DPI profiles, scroll wheel tuning, and thumb wheel settings, all saved to a TOML config file.
+A terminal UI for configuring Logitech MX Master mouse on Linux — button remapping, DPI profiles, scroll wheel tuning, and thumb wheel settings, all saved to a TOML config file.
 
 ![Rust](https://img.shields.io/badge/rust-stable-orange)
 
