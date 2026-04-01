@@ -117,8 +117,8 @@ fn run_monitor(
         let ev = match monitor.read_raw() {
             Ok(e) => e,
             Err(e) => {
-                tracing::error!("Monitor read error: {e}");
-                break;
+                tracing::error!("Monitor read error: {e} — exiting so systemd can restart");
+                std::process::exit(1);
             }
         };
 
