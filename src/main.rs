@@ -289,16 +289,14 @@ Atspi.init()
 listener = Atspi.EventListener.new(on_focus)
 listener.register('window:activate')
 
-# Poll immediately, then retry every 3s until we find a non-shell app.
-_retry_count = [0]
-def retry_poll():
-    if poll_active():
-        return False  # found it, stop retrying
-    _retry_count[0] += 1
-    return _retry_count[0] < 20  # give up after ~60 seconds
+# Poll every 3s continuously — AT-SPI2 events alone are not reliable for
+# apps like Chrome that don't emit window:activate by default.
+def poll_loop():
+    poll_active()
+    return True  # always reschedule
 
-retry_poll()
-GLib.timeout_add(3000, retry_poll)
+poll_loop()
+GLib.timeout_add(3000, poll_loop)
 
 loop = GLib.MainLoop()
 loop.run()
