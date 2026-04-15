@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/bachgarash/logi-tune/compare/v0.1.0...v0.1.1) (2026-04-15)
+
+
+### Bug Fixes
+
+* retry evdev monitor open to survive udev permission race ([c8a1772](https://github.com/bachgarash/logi-tune/commit/c8a1772075a0e3900f37bc9467d07cf0de95f742))
+
 ## 0.1.0 (2026-04-01)
 
 
