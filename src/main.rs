@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
         match (
             input::UinputKeyboard::new(),
             input::UinputMouse::new(),
-            hid::monitor::DeviceMonitor::open(&path),
+            open_monitor_with_retry(&path),
         ) {
             (Ok(keyboard), Ok(mouse), Ok(monitor)) => {
                 let shared = Arc::clone(&shared_config);
@@ -79,6 +79,28 @@ async fn main() -> anyhow::Result<()> {
     } else {
         tui::run(cfg, device, device_name, shared_config).await
     }
+}
+
+/// Open the evdev monitor, retrying on permission denied to tolerate the udev
+/// race where the event device node exists but its group hasn't been set yet.
+fn open_monitor_with_retry(path: &str) -> Result<hid::monitor::DeviceMonitor, hid::HidError> {
+    const ATTEMPTS: u32 = 10;
+    const DELAY: std::time::Duration = std::time::Duration::from_millis(200);
+    let mut last_err = hid::HidError::NotFound;
+    for attempt in 0..ATTEMPTS {
+        match hid::monitor::DeviceMonitor::open(path) {
+            Ok(m) => return Ok(m),
+            Err(e @ hid::HidError::Permission { .. }) => {
+                last_err = e;
+                if attempt + 1 < ATTEMPTS {
+                    tracing::debug!(attempt, "evdev permission denied, retrying");
+                    std::thread::sleep(DELAY);
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last_err)
 }
 
 async fn run_daemon(shared_config: Arc<RwLock<config::Config>>) -> anyhow::Result<()> {
