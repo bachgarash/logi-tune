@@ -135,6 +135,11 @@ fn run_monitor(
     mut keyboard: input::UinputKeyboard,
     mut mouse: input::UinputMouse,
 ) {
+    // Track which button codes had their press swallowed so we can also suppress
+    // their release events — forwarding an orphaned release confuses libinput's
+    // button-state tracking for the virtual mouse, which can glitch other buttons.
+    let mut swallowed: std::collections::HashSet<u16> = Default::default();
+
     loop {
         let ev = match monitor.read_raw() {
             Ok(e) => e,
@@ -143,6 +148,13 @@ fn run_monitor(
                 std::process::exit(1);
             }
         };
+
+        // EV_MSC (type 4) carries scan-code metadata.  When a press is swallowed the
+        // MSC_SCAN that preceded it would reach the virtual mouse as an orphaned event;
+        // dropping all MSC events is safe — virtual mice don't need them.
+        if ev.ev_type == 4 {
+            continue;
+        }
 
         let action = if ev.ev_type == 1 && ev.value == 1 {
             tracing::info!(code = ev.code, "evdev button press");
@@ -154,11 +166,14 @@ fn run_monitor(
 
         match action {
             Some(action) => {
-                // Swallow the event; send SYN so the compositor sees a clean state.
-                let _ = mouse.write_event(0, 0, 0); // EV_SYN
+                swallowed.insert(ev.code);
                 perform_action(&action, &mut keyboard);
             }
             None => {
+                // Suppress the release that pairs with a swallowed press.
+                if ev.ev_type == 1 && ev.value == 0 && swallowed.remove(&ev.code) {
+                    continue;
+                }
                 if let Err(e) = mouse.write_event(ev.ev_type, ev.code, ev.value) {
                     tracing::error!("Mouse pass-through failed: {e}");
                 }
