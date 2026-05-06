@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/bachgarash/logi-tune/compare/v0.1.1...v0.1.2) (2026-04-29)
+
+
+### Bug Fixes
+
+* suppress orphaned MSC_SCAN and button releases for swallowed presses ([529825e](https://github.com/bachgarash/logi-tune/commit/529825ea146529ec92a374948325ea863359b44b))
+
 ## [0.1.1](https://github.com/bachgarash/logi-tune/compare/v0.1.0...v0.1.1) (2026-04-15)
 
 
