@@ -363,10 +363,14 @@ pub fn get_battery_status(device: &mut MxMaster) -> Result<BatteryStatus, HidErr
 /// Decode a `UNIFIED_BATTERY` (0x1004) `getStatus` payload.
 ///
 /// The payload is `[stateOfCharge, levelFlags, chargingStatus, externalPower]`.
-/// `levelFlags` is a coarse critical/low/good/full bitfield and is *not* the
-/// charging status: reading charging state from it treated the "good" flag
-/// (0x04) as the "slow charge" status, so a mouse on battery always looked
-/// like it was charging.
+/// `levelFlags` is a coarse bitfield that tracks the charge level (0x04 at
+/// 45%, 0x08 at 55%) and is *not* the charging status. Reading charging state
+/// from it treated that bitfield's values as status codes — 0x04 matched the
+/// "slow charge" code — so this function reported a mouse on battery as
+/// charging.
+///
+/// Note the TUI reads battery from the kernel's `hidpp_battery` sysfs node
+/// rather than calling this, so the wrong decode was never on screen.
 fn decode_battery_status(payload: &[u8]) -> BatteryStatus {
     let level = payload.first().copied().filter(|&l| l <= 100);
     // 0=discharging 1=charging 2=charging slow 3=complete 4=error
@@ -570,6 +574,8 @@ mod tests {
         // Both payloads read from the same MX Master 4, with the kernel's
         // hidpp_battery sysfs node agreeing each time. Byte 1 is 0x04 in both,
         // which is why reading charging state from it always said "charging".
+        // A later read at 55% returned 37 08 01 01 — byte 1 tracks the level,
+        // confirming it is not a status code.
         let discharging = decode_battery_status(&[0x2d, 0x04, 0x00, 0x00]);
         assert_eq!(discharging.level, Some(45));
         assert!(!discharging.charging);
