@@ -50,30 +50,46 @@ pub struct ButtonConfig {
     pub back_button: ButtonAction,
     pub forward_button: ButtonAction,
     pub thumb_button: ButtonAction,
-    /// The MX Master 4's second thumb control.
+    /// The thumb paddle, as applied over HID++ (control 0x00c3).
     ///
-    /// This was previously assumed not to be capturable via evdev on
-    /// Bluetooth and so was applied over HID++ only. It is: the MX Master 4
-    /// emits an evdev code for all seven of its buttons.
+    /// On the MX Master 4 this is the same physical button as
+    /// `thumb_button`, which is the one bound through evdev.
     #[serde(skip_serializing_if = "is_default_action")]
     pub gesture_button: ButtonAction,
+    /// The third (upper) button of the left-side cluster.
+    ///
+    /// The MX Master 4 has three buttons on its left side above the thumb:
+    /// `back_button` and `forward_button` are the lower two, and this is the
+    /// upper one. Earlier models have only two. Which HID++ control it
+    /// corresponds to has not been verified.
+    #[serde(skip_serializing_if = "is_default_action")]
+    pub upper_side_button: ButtonAction,
     #[serde(skip_serializing_if = "is_default_action")]
     pub smart_shift: ButtonAction,
-    /// Which evdev code each physical button sends on this device.
-    pub evdev_codes: EvdevCodes,
+    /// Which evdev code each physical button sends.
+    ///
+    /// `None` means "use the detected model's defaults", which is what most
+    /// users want; set it only to override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evdev_codes: Option<EvdevCodes>,
 }
 
 fn is_default_action(a: &ButtonAction) -> bool {
     matches!(a, ButtonAction::Default)
 }
 
+/// Code meaning "this button is not mapped".
+///
+/// `0` is `KEY_RESERVED`, which no button ever sends, so it is safe as a
+/// sentinel for a field we have no verified code for.
+pub const EVDEV_CODE_UNMAPPED: u16 = 0;
+
 /// Which evdev `EV_KEY` code each physical button sends.
 ///
-/// These differ between MX models — the MX Master 4 declares codes 272–278
-/// and does not use the same assignment as the 3S — and the kernel's generic
-/// names (`BTN_SIDE`, `BTN_BACK`, …) do not say which physical button a mouse
-/// wires to them. So this is configuration, not a hardcoded per-model table:
-/// run `logi-tune --watch-buttons`, press each button, and put the codes here.
+/// The kernel's generic names (`BTN_SIDE`, `BTN_BACK`, …) do not say which
+/// physical button a mouse wires to them, and the assignment differs between
+/// MX models. Defaults come from [`EvdevCodes::for_model`]; override any of
+/// them in the config file after checking with `logi-tune --watch-buttons`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct EvdevCodes {
@@ -81,34 +97,67 @@ pub struct EvdevCodes {
     pub back_button: u16,
     pub forward_button: u16,
     pub thumb_button: u16,
-    pub gesture_button: u16,
+    pub upper_side_button: u16,
 }
 
-impl Default for EvdevCodes {
-    fn default() -> Self {
-        // BTN_MIDDLE, BTN_SIDE, BTN_EXTRA, BTN_FORWARD, BTN_BACK.
-        //
-        // Confirmed with --watch-buttons on an MX Master 4, which emits all
-        // five; the first four match the MX Master 3S for Mac. 278 was
-        // previously claimed by no field, so that button did nothing.
-        Self {
-            middle_button: 274,
-            back_button: 275,
-            forward_button: 276,
-            thumb_button: 277,
-            gesture_button: 278,
+impl EvdevCodes {
+    /// The codes a given model sends.
+    ///
+    /// The MX Master 4 has three buttons in its left-side cluster rather than
+    /// two, and does not map the thumb control to the same code as the 3S:
+    /// codes 275, 276 and 277 are the side cluster bottom-to-top, and the
+    /// thumb paddle is `BTN_BACK` (278). Confirmed with `--watch-buttons` on
+    /// hardware.
+    pub fn for_model(model: crate::hid::DeviceModel) -> Self {
+        let base = Self {
+            middle_button: 274,  // BTN_MIDDLE
+            back_button: 275,    // BTN_SIDE
+            forward_button: 276, // BTN_EXTRA
+            thumb_button: 277,   // BTN_FORWARD
+            // These models have only two side buttons.
+            upper_side_button: EVDEV_CODE_UNMAPPED,
+        };
+        match model {
+            crate::hid::DeviceModel::MxMaster4 => Self {
+                thumb_button: 278,      // BTN_BACK, the thumb paddle
+                upper_side_button: 277, // BTN_FORWARD, top of the side cluster
+                ..base
+            },
+            _ => base,
         }
     }
 }
 
+impl Default for EvdevCodes {
+    /// Codes for the MX Master 3S for Mac, the model these were first
+    /// confirmed on. Prefer [`EvdevCodes::for_model`] once the device is known.
+    fn default() -> Self {
+        Self::for_model(crate::hid::DeviceModel::MxMaster3SForMac)
+    }
+}
+
 impl ButtonConfig {
+    /// The codes in effect: the config's own, else the model's defaults.
+    pub fn codes(&self, model: crate::hid::DeviceModel) -> EvdevCodes {
+        self.evdev_codes
+            .clone()
+            .unwrap_or_else(|| EvdevCodes::for_model(model))
+    }
+
     /// The action bound to an evdev button code, and the config field it came
     /// from.
     ///
     /// Returns `None` when no field claims the code, which is how an
     /// unconfigured button reaches here.
-    pub fn for_evdev_code(&self, code: u16) -> Option<(&'static str, &ButtonAction)> {
-        let c = &self.evdev_codes;
+    pub fn for_evdev_code(
+        &self,
+        code: u16,
+        c: &EvdevCodes,
+    ) -> Option<(&'static str, &ButtonAction)> {
+        // A button we have no code for must never swallow a real press.
+        if code == EVDEV_CODE_UNMAPPED {
+            return None;
+        }
         // Checked in order, so an ambiguous config resolves predictably
         // rather than depending on map iteration.
         if code == c.middle_button {
@@ -119,8 +168,8 @@ impl ButtonConfig {
             Some(("forward_button", &self.forward_button))
         } else if code == c.thumb_button {
             Some(("thumb_button", &self.thumb_button))
-        } else if code == c.gesture_button {
-            Some(("gesture_button", &self.gesture_button))
+        } else if code == c.upper_side_button {
+            Some(("upper_side_button", &self.upper_side_button))
         } else {
             None
         }
@@ -135,8 +184,9 @@ impl Default for ButtonConfig {
             forward_button: ButtonAction::Default,
             thumb_button: ButtonAction::Default,
             gesture_button: ButtonAction::Default,
+            upper_side_button: ButtonAction::Default,
             smart_shift: ButtonAction::Default,
-            evdev_codes: EvdevCodes::default(),
+            evdev_codes: None,
         }
     }
 }
@@ -276,6 +326,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hid::DeviceModel;
 
     fn with_thumb(combo: &str) -> ButtonConfig {
         ButtonConfig {
@@ -285,41 +336,91 @@ mod tests {
     }
 
     #[test]
-    fn evdev_codes_resolve_to_their_fields() {
-        let buttons = with_thumb("super");
+    fn mx4_side_cluster_has_three_buttons() {
+        let mx4 = EvdevCodes::for_model(DeviceModel::MxMaster4);
+        let mx3s = EvdevCodes::for_model(DeviceModel::MxMaster3S);
 
-        let (field, action) = buttons
-            .for_evdev_code(277)
-            .expect("277 is the thumb button");
-        assert_eq!(field, "thumb_button");
-        assert_eq!(action, &ButtonAction::KeyCombo("super".into()));
+        // Confirmed with --watch-buttons on hardware: the MX Master 4's thumb
+        // button is BTN_BACK, not BTN_FORWARD.
+        assert_eq!(mx4.thumb_button, 278);
+        assert_eq!(mx4.upper_side_button, 277);
+        assert_eq!(mx3s.thumb_button, 277);
 
-        // All seven MX Master 4 codes now resolve; 278 was previously
-        // claimed by no field, which is why that button did nothing.
-        assert_eq!(
-            buttons.for_evdev_code(278).map(|(f, _)| f),
-            Some("gesture_button")
-        );
-        // Left and right clicks are deliberately never intercepted.
-        assert!(buttons.for_evdev_code(272).is_none());
-        assert!(buttons.for_evdev_code(273).is_none());
+        // The first three are the same on both.
+        assert_eq!(mx4.middle_button, mx3s.middle_button);
+        assert_eq!(mx4.back_button, mx3s.back_button);
+        assert_eq!(mx4.forward_button, mx3s.forward_button);
     }
 
     #[test]
-    fn remapping_a_code_moves_the_binding() {
-        let buttons = ButtonConfig {
-            evdev_codes: EvdevCodes {
-                thumb_button: 279,
-                ..Default::default()
-            },
-            ..with_thumb("super")
-        };
+    fn model_defaults_bind_the_mx4_thumb_button() {
+        let buttons = with_thumb("super");
+        let codes = buttons.codes(DeviceModel::MxMaster4);
+
+        let (field, action) = buttons
+            .for_evdev_code(278, &codes)
+            .expect("278 is the MX Master 4 thumb button");
+        assert_eq!(field, "thumb_button");
+        assert_eq!(action, &ButtonAction::KeyCombo("super".into()));
 
         assert_eq!(
-            buttons.for_evdev_code(279).map(|(f, _)| f),
+            buttons.for_evdev_code(277, &codes).map(|(f, _)| f),
+            Some("upper_side_button")
+        );
+        // Left and right clicks are never intercepted.
+        assert!(buttons.for_evdev_code(272, &codes).is_none());
+        assert!(buttons.for_evdev_code(273, &codes).is_none());
+    }
+
+    #[test]
+    fn unmapped_gesture_code_never_swallows_a_press() {
+        let buttons = ButtonConfig::default();
+        let codes = buttons.codes(DeviceModel::MxMaster3S);
+        assert_eq!(codes.upper_side_button, EVDEV_CODE_UNMAPPED);
+        // Code 0 must not match the unmapped field.
+        assert!(buttons.for_evdev_code(0, &codes).is_none());
+        assert!(buttons.for_evdev_code(278, &codes).is_none());
+    }
+
+    #[test]
+    fn explicit_codes_override_the_model_defaults() {
+        let buttons = ButtonConfig {
+            evdev_codes: Some(EvdevCodes {
+                thumb_button: 279, // BTN_TASK, claimed by nothing else
+                ..EvdevCodes::for_model(DeviceModel::MxMaster4)
+            }),
+            ..with_thumb("super")
+        };
+        let codes = buttons.codes(DeviceModel::MxMaster4);
+        assert_eq!(
+            buttons.for_evdev_code(279, &codes).map(|(f, _)| f),
             Some("thumb_button")
         );
-        assert!(buttons.for_evdev_code(277).is_none());
+        // The model default for the thumb button no longer applies.
+        assert_eq!(
+            buttons.for_evdev_code(278, &codes).map(|(f, _)| f),
+            None,
+            "278 should be free once the thumb button moves"
+        );
+    }
+
+    #[test]
+    fn duplicate_codes_resolve_in_field_order() {
+        // Two fields claiming one code is a user error, but it must resolve
+        // deterministically rather than depending on iteration order.
+        let buttons = ButtonConfig {
+            evdev_codes: Some(EvdevCodes {
+                thumb_button: 275, // same as back_button
+                ..EvdevCodes::for_model(DeviceModel::MxMaster4)
+            }),
+            ..with_thumb("super")
+        };
+        let codes = buttons.codes(DeviceModel::MxMaster4);
+        assert_eq!(
+            buttons.for_evdev_code(275, &codes).map(|(f, _)| f),
+            Some("back_button"),
+            "earlier field wins"
+        );
     }
 
     #[test]
@@ -333,9 +434,10 @@ mod tests {
             KeyCombo = "super"
         "#;
         let cfg: Config = toml::from_str(raw).expect("old config still parses");
-        assert_eq!(cfg.buttons.evdev_codes, EvdevCodes::default());
+        assert!(cfg.buttons.evdev_codes.is_none(), "falls back to the model");
+        let codes = cfg.buttons.codes(DeviceModel::MxMaster4);
         assert_eq!(
-            cfg.buttons.for_evdev_code(277).map(|(f, _)| f),
+            cfg.buttons.for_evdev_code(278, &codes).map(|(f, _)| f),
             Some("thumb_button")
         );
         // Defaults for sections the file omits entirely.
