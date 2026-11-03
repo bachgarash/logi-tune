@@ -3,6 +3,7 @@
 //! Run with `--daemon` to start in headless mode: the button monitor runs
 //! permanently and reloads the config file whenever it changes on disk.
 
+use std::os::unix::process::CommandExt;
 use std::sync::{Arc, Mutex, RwLock};
 
 use tracing_subscriber::EnvFilter;
@@ -78,7 +79,8 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(Mutex::new(d))
     });
 
-    spawn_focus_tracker();
+    // Held until main returns so the tracker is stopped when we exit.
+    let _focus_tracker = spawn_focus_tracker();
 
     if daemon_mode {
         tracing::info!("Running in daemon mode — TUI disabled");
@@ -413,22 +415,60 @@ loop = GLib.MainLoop()
 loop.run()
 "#;
 
+/// Owns the AT-SPI2 focus tracker subprocess and stops it on drop.
+///
+/// Without an owner the tracker outlived every `logi-tune` process that
+/// started one, so each launch of the TUI or the daemon left another python
+/// process running forever.
+struct FocusTracker(std::process::Child);
+
+impl Drop for FocusTracker {
+    fn drop(&mut self) {
+        // kill() errors only if the child already exited; either way it has to
+        // be reaped so it does not linger as a zombie.
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+        tracing::debug!("focus tracker stopped");
+    }
+}
+
 /// Spawn the AT-SPI2 focus tracker as a background Python subprocess.
 /// Writes the embedded script to a temp file and runs it with python3.
-fn spawn_focus_tracker() {
+///
+/// The returned handle must be held for as long as the tracker is wanted:
+/// dropping it kills the tracker. The child is additionally given
+/// `PR_SET_PDEATHSIG`, so it still dies if we are killed outright and `Drop`
+/// never runs.
+fn spawn_focus_tracker() -> Option<FocusTracker> {
     let script_path = "/tmp/logi-tune-focus-tracker.py";
     if let Err(e) = std::fs::write(script_path, FOCUS_TRACKER_SCRIPT) {
         tracing::warn!("Could not write focus tracker script: {e}");
-        return;
+        return None;
     }
-    match std::process::Command::new("python3")
-        .arg(script_path)
+
+    let mut cmd = std::process::Command::new("python3");
+    cmd.arg(script_path)
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(_) => tracing::info!("AT-SPI2 focus tracker started"),
-        Err(e) => tracing::warn!("Could not start focus tracker: {e}"),
+        .stderr(std::process::Stdio::null());
+
+    // SAFETY: set_pdeathsig is async-signal-safe and touches only this
+    // process's prctl state, which is what pre_exec requires.
+    unsafe {
+        cmd.pre_exec(|| {
+            nix::sys::prctl::set_pdeathsig(nix::sys::signal::Signal::SIGTERM)
+                .map_err(std::io::Error::from)
+        });
+    }
+
+    match cmd.spawn() {
+        Ok(child) => {
+            tracing::info!(pid = child.id(), "AT-SPI2 focus tracker started");
+            Some(FocusTracker(child))
+        }
+        Err(e) => {
+            tracing::warn!("Could not start focus tracker: {e}");
+            None
+        }
     }
 }
 
