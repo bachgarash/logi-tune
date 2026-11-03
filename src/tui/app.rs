@@ -7,15 +7,9 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{Terminal, backend::Backend};
 use tokio::sync::oneshot;
 
+use crate::apply::apply_config_to_device;
 use crate::config::Config;
-use crate::hid::{
-    HidError, MxMaster,
-    features::{
-        BatteryStatus, button_layout, dpi_range, remap_button, set_dpi, set_scroll_mode,
-        set_smart_shift, set_thumb_wheel,
-    },
-    haptics::set_level as set_haptic_level,
-};
+use crate::hid::{HidError, MxMaster, features::BatteryStatus};
 
 use super::ui::render;
 
@@ -353,9 +347,12 @@ impl App {
                     0 if self.config.scroll.lines_per_notch < 10 => {
                         self.config.scroll.lines_per_notch += 1;
                     }
-                    2 => {
-                        self.config.scroll.smart_shift_threshold =
-                            self.config.scroll.smart_shift_threshold.saturating_add(1);
+                    // Bounded: this value goes to the device, and an
+                    // unbounded saturating_add let it reach 255.
+                    2 if self.config.scroll.smart_shift_threshold
+                        < crate::config::SMART_SHIFT_MAX =>
+                    {
+                        self.config.scroll.smart_shift_threshold += 1;
                     }
                     _ => {}
                 }
@@ -548,81 +545,6 @@ fn read_battery_sysfs() -> anyhow::Result<BatteryStatus> {
         });
     }
     anyhow::bail!("no hidpp_battery found in /sys/class/power_supply")
-}
-
-fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), HidError> {
-    // A setting the device does not implement must not abort the rest of the
-    // apply, and button mappings work through evdev regardless of HID++. So
-    // per-feature failures are logged and skipped.
-    //
-    // These were previously attributed to a Bluetooth limitation. They were
-    // not: short HID++ reports do not exist on Bluetooth, which made every
-    // call fail. See `HidBus`.
-    macro_rules! hidpp {
-        ($e:expr) => {
-            match $e {
-                Err(
-                    e @ (HidError::Protocol(_)
-                    | HidError::Io(_)
-                    | HidError::Timeout
-                    | HidError::FeatureMissing(_)
-                    | HidError::WaveformUnsupported(_)),
-                ) => {
-                    tracing::warn!("HID++ setting skipped: {e}");
-                }
-                result => result?,
-            }
-        };
-    }
-
-    if let Some(&dpi) = cfg.dpi.profiles.get(cfg.dpi.active) {
-        // Clamp to what the sensor accepts; an out-of-range value is rejected
-        // outright, so the whole DPI setting would otherwise be lost.
-        let dpi = match dpi_range(device) {
-            Ok(range) => range.clamp(dpi),
-            Err(_) => dpi,
-        };
-        hidpp!(set_dpi(device, dpi));
-    }
-    hidpp!(set_smart_shift(device, cfg.scroll.smart_shift_threshold));
-    hidpp!(set_scroll_mode(
-        device,
-        cfg.scroll.hi_res,
-        cfg.scroll.invert,
-        cfg.scroll.hi_res_multiplier
-    ));
-    hidpp!(set_thumb_wheel(device, cfg.thumb_wheel.invert));
-    // Devices without a haptic motor report no 0x19b0 and are skipped.
-    hidpp!(set_haptic_level(
-        device,
-        cfg.haptics.enabled,
-        cfg.haptics.level
-    ));
-
-    let layout = button_layout(device.model);
-    hidpp!(remap_button(
-        device,
-        layout.gesture_button,
-        &cfg.buttons.gesture_button
-    ));
-    hidpp!(remap_button(
-        device,
-        layout.thumb_button,
-        &cfg.buttons.thumb_button
-    ));
-    hidpp!(remap_button(device, layout.back, &cfg.buttons.back_button));
-    hidpp!(remap_button(
-        device,
-        layout.forward,
-        &cfg.buttons.forward_button
-    ));
-    hidpp!(remap_button(
-        device,
-        layout.smart_shift,
-        &cfg.buttons.smart_shift
-    ));
-
-    Ok(())
 }
 
 /// Run the ratatui event loop until the user quits.
