@@ -140,6 +140,25 @@ impl Default for DpiConfig {
     }
 }
 
+/// Haptic motor settings. Only the MX Master 4 has one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HapticsConfig {
+    pub enabled: bool,
+    /// Strength 0–100.
+    pub level: u8,
+}
+
+impl Default for HapticsConfig {
+    fn default() -> Self {
+        // 60 is the level the MX Master 4 ships with.
+        Self {
+            enabled: true,
+            level: 60,
+        }
+    }
+}
+
 /// Root configuration struct.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -148,6 +167,7 @@ pub struct Config {
     pub scroll: ScrollConfig,
     pub thumb_wheel: ThumbWheelConfig,
     pub dpi: DpiConfig,
+    pub haptics: HapticsConfig,
 }
 
 impl Config {

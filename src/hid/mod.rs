@@ -2,6 +2,7 @@
 
 pub mod device;
 pub mod features;
+pub mod haptics;
 pub mod monitor;
 pub mod protocol;
 
@@ -95,6 +96,8 @@ pub enum HidError {
     Timeout,
     #[error("device does not support HID++ feature {0:#06x}")]
     FeatureMissing(u16),
+    #[error("device does not implement haptic waveform {0}")]
+    WaveformUnsupported(&'static str),
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

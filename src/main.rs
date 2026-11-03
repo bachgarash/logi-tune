@@ -21,13 +21,22 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    let daemon_mode = std::env::args().any(|a| a == "--daemon");
-    let scan_mode = std::env::args().any(|a| a == "--scan");
+    let args: Vec<String> = std::env::args().collect();
+    let daemon_mode = args.iter().any(|a| a == "--daemon");
 
-    // --scan runs before any uinput or evdev setup: it only talks HID++ and
-    // must not disturb a daemon that is already grabbing the device.
-    if scan_mode {
+    // These modes run before any uinput or evdev setup: they only talk HID++
+    // and must not disturb a daemon that is already grabbing the device.
+    if args.iter().any(|a| a == "--scan") {
         return run_scan();
+    }
+    if args.iter().any(|a| a == "--haptic-list") {
+        return run_haptic_list();
+    }
+    if let Some(i) = args.iter().position(|a| a == "--haptic") {
+        let name = args
+            .get(i + 1)
+            .ok_or_else(|| anyhow::anyhow!("--haptic needs a waveform name; see --haptic-list"))?;
+        return run_haptic_play(name);
     }
 
     let cfg = config::Config::load()?;
@@ -154,6 +163,60 @@ fn run_scan() -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// List the haptic waveforms the connected device implements.
+fn run_haptic_list() -> anyhow::Result<()> {
+    let mut device = hid::MxMaster::open()
+        .map_err(|e| anyhow::anyhow!("{e}\n\nSee README for the udev rule."))?;
+
+    let info = hid::haptics::info(&mut device)
+        .map_err(|e| anyhow::anyhow!("{} has no haptic motor: {e}", device.model.display_name()))?;
+    let level = hid::haptics::level(&mut device)?;
+
+    println!("{}", device.model.display_name());
+    println!(
+        "haptics {} at level {}/100 (device default {})",
+        if level.enabled { "enabled" } else { "disabled" },
+        level.level,
+        info.default_level
+    );
+    println!("waveform mask {:#010x}\n", info.waveform_mask);
+    println!("supported waveforms:");
+    for w in info.supported() {
+        println!("  {:#04x}  {}", w.id(), w.name());
+    }
+
+    let unsupported: Vec<_> = hid::haptics::Waveform::ALL
+        .iter()
+        .filter(|w| !info.supports(**w))
+        .collect();
+    if !unsupported.is_empty() {
+        println!("\nnot implemented by this device:");
+        for w in unsupported {
+            println!("  {:#04x}  {}", w.id(), w.name());
+        }
+    }
+    Ok(())
+}
+
+/// Play one haptic waveform, for trying them out from a shell.
+fn run_haptic_play(name: &str) -> anyhow::Result<()> {
+    let waveform = hid::haptics::Waveform::parse(name).ok_or_else(|| {
+        anyhow::anyhow!("unknown waveform {name:?}; run --haptic-list to see the names")
+    })?;
+
+    let mut device = hid::MxMaster::open()
+        .map_err(|e| anyhow::anyhow!("{e}\n\nSee README for the udev rule."))?;
+
+    hid::haptics::play(&mut device, waveform).map_err(|e| {
+        anyhow::anyhow!(
+            "could not play {}: {e}\n\nRun --haptic-list to see what this device supports.",
+            waveform.name()
+        )
+    })?;
+    println!("played {} ({:#04x})", waveform.name(), waveform.id());
     Ok(())
 }
 
