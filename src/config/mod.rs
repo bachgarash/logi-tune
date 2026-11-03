@@ -237,7 +237,75 @@ pub struct Config {
     pub haptics: HapticsConfig,
 }
 
+/// Highest SmartShift threshold the feature accepts. Values above this were
+/// previously writable from the TUI, which had no upper bound.
+pub const SMART_SHIFT_MAX: u8 = 50;
+/// Highest haptic level, as a percentage.
+pub const HAPTIC_LEVEL_MAX: u8 = 100;
+/// Bounds on the software-only wheel and thumb settings.
+pub const LINES_PER_NOTCH_RANGE: (u8, u8) = (1, 10);
+pub const THUMB_SENSITIVITY_RANGE: (u8, u8) = (1, 10);
+
 impl Config {
+    /// Clamp out-of-range values, returning a description of each correction.
+    ///
+    /// Values are pushed to hardware, and until now nothing checked them: a
+    /// `smart_shift_threshold` of 164 sat in a config file for weeks because
+    /// the setting was broken, and became live the moment it was fixed. An
+    /// out-of-range value must be corrected here rather than sent.
+    pub fn validate(&mut self) -> Vec<String> {
+        let mut fixed = Vec::new();
+
+        let mut clamp = |name: &str, value: &mut u8, lo: u8, hi: u8| {
+            let was = *value;
+            let now = was.clamp(lo, hi);
+            if now != was {
+                *value = now;
+                fixed.push(format!("{name}: {was} out of range {lo}-{hi}, using {now}"));
+            }
+        };
+
+        clamp(
+            "scroll.smart_shift_threshold",
+            &mut self.scroll.smart_shift_threshold,
+            0,
+            SMART_SHIFT_MAX,
+        );
+        clamp(
+            "scroll.lines_per_notch",
+            &mut self.scroll.lines_per_notch,
+            LINES_PER_NOTCH_RANGE.0,
+            LINES_PER_NOTCH_RANGE.1,
+        );
+        clamp(
+            "thumb_wheel.sensitivity",
+            &mut self.thumb_wheel.sensitivity,
+            THUMB_SENSITIVITY_RANGE.0,
+            THUMB_SENSITIVITY_RANGE.1,
+        );
+        clamp(
+            "haptics.level",
+            &mut self.haptics.level,
+            0,
+            HAPTIC_LEVEL_MAX,
+        );
+
+        if self.dpi.profiles.is_empty() {
+            self.dpi = DpiConfig::default();
+            fixed.push("dpi.profiles was empty, restored defaults".to_string());
+        }
+        if self.dpi.active >= self.dpi.profiles.len() {
+            let was = self.dpi.active;
+            self.dpi.active = self.dpi.profiles.len() - 1;
+            fixed.push(format!(
+                "dpi.active: {was} past the end of dpi.profiles, using {}",
+                self.dpi.active
+            ));
+        }
+
+        fixed
+    }
+
     /// Return the path to the config file.
     pub fn path() -> PathBuf {
         dirs::config_dir()
@@ -247,16 +315,28 @@ impl Config {
     }
 
     /// Load config from disk, falling back to `Default` if the file is missing.
+    ///
+    /// Out-of-range values are clamped and logged; see [`Config::validate`].
     pub fn load() -> anyhow::Result<Self> {
+        let mut cfg = Self::load_unvalidated()?;
+        for correction in cfg.validate() {
+            tracing::warn!("config: {correction}");
+        }
+        Ok(cfg)
+    }
+
+    /// Load without clamping out-of-range values.
+    ///
+    /// Only for callers that want to report the corrections themselves, such
+    /// as `--dry-run`; everything else should use [`Config::load`].
+    pub fn load_unvalidated() -> anyhow::Result<Self> {
         let path = Self::path();
         if !path.exists() {
             return Ok(Self::default());
         }
         let raw = std::fs::read_to_string(&path)
             .with_context(|| format!("reading config from {}", path.display()))?;
-        let cfg: Self = toml::from_str(&raw)
-            .with_context(|| format!("parsing config from {}", path.display()))?;
-        Ok(cfg)
+        toml::from_str(&raw).with_context(|| format!("parsing config from {}", path.display()))
     }
 
     /// Persist config to disk, creating parent directories as needed.
@@ -340,5 +420,83 @@ mod tests {
         );
         // Defaults for sections the file omits entirely.
         assert!(cfg.haptics.enabled);
+    }
+}
+
+#[cfg(test)]
+mod validate_tests {
+    use super::*;
+
+    #[test]
+    fn clamps_an_out_of_range_smart_shift_threshold() {
+        // 164 is the value that sat in a real config file and became live the
+        // moment the SmartShift feature was fixed.
+        let raw = r#"
+            [scroll]
+            smart_shift_threshold = 164
+        "#;
+        let mut cfg: Config = toml::from_str(raw).unwrap();
+        let fixed = cfg.validate();
+
+        assert_eq!(cfg.scroll.smart_shift_threshold, SMART_SHIFT_MAX);
+        assert_eq!(fixed.len(), 1, "reports exactly what it corrected");
+        assert!(fixed[0].contains("smart_shift_threshold"), "{:?}", fixed);
+        assert!(fixed[0].contains("164"), "names the offending value");
+    }
+
+    #[test]
+    fn a_valid_config_is_left_alone() {
+        let mut cfg = Config::default();
+        assert!(cfg.validate().is_empty());
+        assert_eq!(cfg.scroll.smart_shift_threshold, 10);
+    }
+
+    #[test]
+    fn clamps_every_bounded_field() {
+        let raw = r#"
+            [scroll]
+            lines_per_notch = 99
+            [thumb_wheel]
+            sensitivity = 0
+            [haptics]
+            level = 200
+        "#;
+        let mut cfg: Config = toml::from_str(raw).unwrap();
+        let fixed = cfg.validate();
+
+        assert_eq!(cfg.scroll.lines_per_notch, LINES_PER_NOTCH_RANGE.1);
+        assert_eq!(cfg.thumb_wheel.sensitivity, THUMB_SENSITIVITY_RANGE.0);
+        assert_eq!(cfg.haptics.level, HAPTIC_LEVEL_MAX);
+        assert_eq!(fixed.len(), 3);
+    }
+
+    #[test]
+    fn repairs_a_dpi_index_past_the_end() {
+        let raw = r#"
+            [dpi]
+            profiles = [800, 1600]
+            active = 7
+        "#;
+        let mut cfg: Config = toml::from_str(raw).unwrap();
+        let fixed = cfg.validate();
+
+        assert_eq!(cfg.dpi.active, 1, "falls back to the last profile");
+        assert_eq!(fixed.len(), 1);
+        assert!(fixed[0].contains("dpi.active"));
+    }
+
+    #[test]
+    fn restores_defaults_for_an_empty_profile_list() {
+        let raw = r#"
+            [dpi]
+            profiles = []
+            active = 0
+        "#;
+        let mut cfg: Config = toml::from_str(raw).unwrap();
+        let fixed = cfg.validate();
+
+        assert!(!cfg.dpi.profiles.is_empty());
+        assert!(cfg.dpi.active < cfg.dpi.profiles.len());
+        assert_eq!(fixed.len(), 1);
     }
 }
