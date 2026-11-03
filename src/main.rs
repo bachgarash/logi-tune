@@ -36,6 +36,9 @@ async fn main() -> anyhow::Result<()> {
     if args.iter().any(|a| a == "--watch-buttons") {
         return run_watch_buttons();
     }
+    if args.iter().any(|a| a == "--dry-run") {
+        return run_dry_run();
+    }
     if let Some(i) = args.iter().position(|a| a == "--haptic") {
         let name = args
             .get(i + 1)
@@ -167,6 +170,53 @@ fn run_scan() -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Show what applying the config would change on the device, without writing.
+///
+/// Worth running before a first apply: config values are pushed to persistent
+/// device state, and a file can hold a value that has never taken effect.
+fn run_dry_run() -> anyhow::Result<()> {
+    // Unvalidated, so the corrections can be shown rather than applied silently.
+    let mut cfg = config::Config::load_unvalidated()?;
+    let corrections = cfg.validate();
+
+    let mut device = hid::MxMaster::open()
+        .map_err(|e| anyhow::anyhow!("{e}\n\nSee README for the udev rule."))?;
+    println!("{} at {}\n", device.model.display_name(), device.path);
+
+    if !corrections.is_empty() {
+        println!("config corrections:");
+        for c in &corrections {
+            println!("  {c}");
+        }
+        println!();
+    }
+
+    let plan = apply::plan(&mut device, &cfg);
+    let changes: Vec<_> = plan.iter().filter(|p| p.differs()).collect();
+
+    println!("  {:<30} {:<12} config", "setting", "device");
+    for p in &plan {
+        println!(
+            "  {:<30} {:<12} {}{}",
+            p.setting,
+            p.current,
+            p.desired,
+            if p.differs() {
+                "   <- would change"
+            } else {
+                ""
+            }
+        );
+    }
+
+    if changes.is_empty() {
+        println!("\nNothing to change.");
+    } else {
+        println!("\n{} setting(s) would change.", changes.len());
+    }
     Ok(())
 }
 

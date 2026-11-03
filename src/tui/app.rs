@@ -347,9 +347,12 @@ impl App {
                     0 if self.config.scroll.lines_per_notch < 10 => {
                         self.config.scroll.lines_per_notch += 1;
                     }
-                    2 => {
-                        self.config.scroll.smart_shift_threshold =
-                            self.config.scroll.smart_shift_threshold.saturating_add(1);
+                    // Bounded: this value goes to the device, and an
+                    // unbounded saturating_add let it reach 255.
+                    2 if self.config.scroll.smart_shift_threshold
+                        < crate::config::SMART_SHIFT_MAX =>
+                    {
+                        self.config.scroll.smart_shift_threshold += 1;
                     }
                     _ => {}
                 }

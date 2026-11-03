@@ -28,13 +28,45 @@ impl MxMaster {
         func: u8,
         params: &[u8],
     ) -> Result<[u8; 64], HidError> {
-        if params.len() <= 3 && self.bus.supports_short_reports() {
-            let mut p = [0u8; 3];
-            p[..params.len()].copy_from_slice(params);
-            send_short(&mut self.file, self.device_index, feature_index, func, p)
-        } else {
-            self.request_long(feature_index, func, params)
+        self.retrying(|s| {
+            if params.len() <= 3 && s.bus.supports_short_reports() {
+                let mut p = [0u8; 3];
+                p[..params.len()].copy_from_slice(params);
+                send_short(&mut s.file, s.device_index, feature_index, func, p)
+            } else {
+                let mut p = [0u8; 16];
+                let n = params.len().min(16);
+                p[..n].copy_from_slice(&params[..n]);
+                send_long(&mut s.file, s.device_index, feature_index, func, p)
+            }
+        })
+    }
+
+    /// Retry a request that timed out.
+    ///
+    /// A reply can go missing when another HID++ client is talking to the same
+    /// device — its reader may consume our reply before we see it. Without a
+    /// retry that surfaces as a setting silently not applying. Every request
+    /// here is a getter or an idempotent setter, so re-sending is safe.
+    fn retrying<F>(&mut self, mut attempt: F) -> Result<[u8; 64], HidError>
+    where
+        F: FnMut(&mut Self) -> Result<[u8; 64], HidError>,
+    {
+        const ATTEMPTS: u32 = 3;
+        let mut last = HidError::Timeout;
+        for n in 0..ATTEMPTS {
+            match attempt(self) {
+                Err(HidError::Timeout) => {
+                    last = HidError::Timeout;
+                    if n + 1 < ATTEMPTS {
+                        tracing::debug!(attempt = n + 1, "HID++ timeout, retrying");
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                }
+                other => return other,
+            }
         }
+        Err(last)
     }
 
     /// Issue a HID++ 2.0 request forcing a long (20-byte) report, for calls
@@ -45,10 +77,12 @@ impl MxMaster {
         func: u8,
         params: &[u8],
     ) -> Result<[u8; 64], HidError> {
-        let mut p = [0u8; 16];
-        let n = params.len().min(16);
-        p[..n].copy_from_slice(&params[..n]);
-        send_long(&mut self.file, self.device_index, feature_index, func, p)
+        self.retrying(|s| {
+            let mut p = [0u8; 16];
+            let n = params.len().min(16);
+            p[..n].copy_from_slice(&params[..n]);
+            send_long(&mut s.file, s.device_index, feature_index, func, p)
+        })
     }
 }
 

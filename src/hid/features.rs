@@ -254,6 +254,41 @@ impl DpiRange {
 /// is a step marker rather than a value: the low 13 bits are the step and the
 /// following word is the upper bound. The MX Master 4 reports
 /// `00c8 e032 1f40`, meaning 200 then 250–8000 in steps of 50.
+/// Read the sensor's current DPI via ADJUSTABLE_DPI (0x2201) function 0x02.
+pub fn current_dpi(device: &mut MxMaster) -> Result<u16, HidError> {
+    let fi = get_feature_index(device, FEATURE_ADJUSTABLE_DPI)?;
+    // Reply: [sensor, dpi hi, dpi lo, default hi, default lo]
+    let r = device.request(fi, 0x02, &[0x00])?;
+    Ok(u16::from_be_bytes([r[5], r[6]]))
+}
+
+/// Read the current SmartShift mode and threshold.
+///
+/// Returns `(mode, threshold)`; mode 1 is free-spin and 2 is ratchet.
+pub fn current_smart_shift(device: &mut MxMaster) -> Result<(u8, u8), HidError> {
+    let (number, fi) = resolve_feature(device, SMART_SHIFT_FEATURES)?;
+    let func = if number == 0x2111 { 0x01 } else { 0x00 };
+    let r = device.request(fi, func, &[])?;
+    Ok((r[4], r[5]))
+}
+
+/// Read the current scroll wheel mode byte, as a `(hi_res, invert)` pair.
+pub fn current_scroll_mode(device: &mut MxMaster) -> Result<(bool, bool), HidError> {
+    let (number, fi) = resolve_feature(device, SCROLL_FEATURES)?;
+    if number != 0x2121 {
+        return Err(HidError::FeatureMissing(0x2121));
+    }
+    let r = device.request(fi, 0x01, &[])?;
+    Ok((r[4] & HIRES_BIT_HI_RES != 0, r[4] & HIRES_BIT_INVERT != 0))
+}
+
+/// Read whether the thumb wheel is currently inverted.
+pub fn current_thumb_invert(device: &mut MxMaster) -> Result<bool, HidError> {
+    let fi = get_feature_index(device, FEATURE_THUMB_WHEEL)?;
+    let r = device.request(fi, 0x01, &[])?;
+    Ok(r[5] & THUMB_BIT_INVERT != 0)
+}
+
 pub fn dpi_range(device: &mut MxMaster) -> Result<DpiRange, HidError> {
     let fi = get_feature_index(device, FEATURE_ADJUSTABLE_DPI)?;
     // function 0x01 = getSensorDpiList, sensor 0
