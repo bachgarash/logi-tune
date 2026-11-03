@@ -14,6 +14,7 @@ use crate::hid::{
         BatteryStatus, button_layout, dpi_range, remap_button, set_dpi, set_scroll_mode,
         set_smart_shift, set_thumb_wheel,
     },
+    haptics::set_level as set_haptic_level,
 };
 
 use super::ui::render;
@@ -564,7 +565,8 @@ fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), Hid
                     e @ (HidError::Protocol(_)
                     | HidError::Io(_)
                     | HidError::Timeout
-                    | HidError::FeatureMissing(_)),
+                    | HidError::FeatureMissing(_)
+                    | HidError::WaveformUnsupported(_)),
                 ) => {
                     tracing::warn!("HID++ setting skipped: {e}");
                 }
@@ -590,6 +592,12 @@ fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), Hid
         cfg.scroll.hi_res_multiplier
     ));
     hidpp!(set_thumb_wheel(device, cfg.thumb_wheel.invert));
+    // Devices without a haptic motor report no 0x19b0 and are skipped.
+    hidpp!(set_haptic_level(
+        device,
+        cfg.haptics.enabled,
+        cfg.haptics.level
+    ));
 
     let layout = button_layout(device.model);
     hidpp!(remap_button(
