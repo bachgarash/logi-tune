@@ -21,6 +21,13 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let daemon_mode = std::env::args().any(|a| a == "--daemon");
+    let scan_mode = std::env::args().any(|a| a == "--scan");
+
+    // --scan runs before any uinput or evdev setup: it only talks HID++ and
+    // must not disturb a daemon that is already grabbing the device.
+    if scan_mode {
+        return run_scan();
+    }
 
     let cfg = config::Config::load()?;
 
@@ -79,6 +86,73 @@ async fn main() -> anyhow::Result<()> {
     } else {
         tui::run(cfg, device, device_name, shared_config).await
     }
+}
+
+/// Print the device's HID++ feature table and reprogrammable controls.
+///
+/// This is the tool to reach for when adding a new model: the feature numbers
+/// and control IDs it prints are what the hardware actually reports, which has
+/// turned out to differ between MX generations.
+fn run_scan() -> anyhow::Result<()> {
+    let mut device = hid::MxMaster::open()
+        .map_err(|e| anyhow::anyhow!("{e}\n\nSee README for the udev rule."))?;
+
+    println!(
+        "{} at {} via {:?}",
+        device.model.display_name(),
+        device.path,
+        device.bus
+    );
+
+    let scan =
+        hid::features::scan(&mut device).map_err(|e| anyhow::anyhow!("HID++ scan failed: {e}"))?;
+
+    println!("HID++ {}.{}\n", scan.protocol.0, scan.protocol.1);
+
+    println!("features ({}):", scan.features.len());
+    println!("  idx   number  ver  name                      flags");
+    for f in &scan.features {
+        println!(
+            "  {:#04x}  {:#06x}  {:<3}  {:<24}  {}",
+            f.index,
+            f.number,
+            f.version,
+            hid::features::feature_name(f.number),
+            f.flag_names().join(",")
+        );
+    }
+
+    println!("\nreprogrammable controls ({}):", scan.controls.len());
+    println!("  cid     tid     flags  group  mask  rawXY");
+    for c in &scan.controls {
+        println!(
+            "  {:#06x}  {:#06x}  {:#04x}   {:<5}  {:#04x}  {:#04x}",
+            c.control_id, c.task_id, c.flags, c.group, c.group_mask, c.raw_xy
+        );
+    }
+
+    let layout = hid::features::button_layout(device.model);
+    println!(
+        "\nlayout this build uses for {}:",
+        device.model.display_name()
+    );
+    let reported: Vec<u16> = scan.controls.iter().map(|c| c.control_id).collect();
+    for (name, cid) in [
+        ("gesture_button", Some(layout.gesture_button)),
+        ("thumb_button", Some(layout.thumb_button)),
+        ("back", Some(layout.back)),
+        ("forward", Some(layout.forward)),
+        ("smart_shift", Some(layout.smart_shift)),
+        ("haptic_button", layout.haptic_button),
+    ] {
+        match cid {
+            Some(cid) if reported.contains(&cid) => println!("  {name:<16} {cid:#06x}"),
+            Some(cid) => println!("  {name:<16} {cid:#06x}  NOT REPORTED BY THIS DEVICE"),
+            None => println!("  {name:<16} -"),
+        }
+    }
+
+    Ok(())
 }
 
 /// Open the evdev monitor, retrying on permission denied to tolerate the udev

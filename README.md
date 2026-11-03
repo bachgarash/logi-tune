@@ -50,7 +50,23 @@ This runs `logi-tune --daemon` in the background so button mappings stay active 
 ```
 logi-tune          # open the TUI
 logi-tune --daemon # headless mode, reloads config on change
+logi-tune --scan   # print the device's HID++ feature and control tables
 ```
+
+### `--scan`
+
+`--scan` asks the mouse what it actually supports and prints its HID++ feature
+table, its reprogrammable control IDs, and whether the control IDs this build
+expects are among them. It is read-only and is the first thing to run when
+adding a model or diagnosing a setting that does not take effect.
+
+## HID++ over Bluetooth
+
+Bluetooth MX devices declare **only** report ID `0x11` (20-byte long) in their
+HID report descriptor — there is no `0x10` (7-byte short) report. A short HID++
+request is therefore dropped with no reply, which looks exactly like the kernel
+driver swallowing the response. `logi-tune` picks the report size from the
+transport, so HID++ works on both Bluetooth and USB.
 
 ### TUI keys
 

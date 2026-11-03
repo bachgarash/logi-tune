@@ -25,17 +25,99 @@ fn wait_readable(file: &File, timeout_ms: i32) -> bool {
 }
 
 /// Software ID embedded in every report (used to correlate responses).
-/// Must be non-zero; 0x01 is the conventional value used by third-party tools.
-const SW_ID: u8 = 0x01;
+///
+/// Must be non-zero.  We deliberately avoid `0x01`: that value is in common
+/// use by other HID++ clients that may be talking to the same device, and the
+/// software ID is the only thing distinguishing our replies from theirs.
+const SW_ID: u8 = 0x0a;
 
-/// Send a 7-byte short HID++ report and read back a 7-byte response.
+/// Longest HID++ report (very-long reports are 64 bytes).
+const MAX_REPORT: usize = 64;
+
+/// Outcome of inspecting one received report.
+enum Match {
+    /// The reply to our request.
+    Ours,
+    /// A HID++ error report carrying this error code.
+    Error(u8),
+    /// Someone else's reply, or a device notification — keep waiting.
+    Unrelated,
+}
+
+/// Classify a received report against the request we sent.
+///
+/// A response echoes the feature index in byte 2 and `(func << 4) | SW_ID` in
+/// byte 3.  Matching on both is what makes this safe to use while the device
+/// is also emitting notifications (button presses, wheel ratchet changes) and
+/// while other HID++ clients are active.
+fn classify(report: &[u8], feature_index: u8, func: u8) -> Match {
+    if report.len() < 4 || (report[0] != REPORT_ID_SHORT && report[0] != REPORT_ID_LONG) {
+        return Match::Unrelated;
+    }
+    // HID++ 2.0 error: byte 2 == 0xff, byte 3 echoes our func/SW_ID, byte 5 is the code.
+    if report[2] == 0xff && report.len() >= 6 && (report[3] & 0x0f) == SW_ID {
+        return Match::Error(report[5]);
+    }
+    // HID++ 1.0 error: byte 2 == 0x8f, byte 4 is the code.
+    if report[2] == 0x8f && report.len() >= 5 {
+        return Match::Error(report[4]);
+    }
+    if report[2] == feature_index && report[3] == (func << 4) | SW_ID {
+        return Match::Ours;
+    }
+    Match::Unrelated
+}
+
+/// Send `request` and wait for the matching reply, discarding notifications
+/// and other clients' traffic.
+///
+/// Reads are sized to the largest possible report rather than to the request
+/// size: the device may answer a long request with a short report, and
+/// `read_exact` on an undersized buffer would stall waiting for bytes that
+/// never arrive.
+fn exchange(
+    file: &mut File,
+    request: &[u8],
+    feature_index: u8,
+    func: u8,
+) -> Result<[u8; MAX_REPORT], HidError> {
+    tracing::debug!(tx = ?request, "hidpp tx");
+    file.write_all(request)?;
+
+    let mut buf = [0u8; MAX_REPORT];
+    for _ in 0..32 {
+        if !wait_readable(file, 300) {
+            return Err(HidError::Timeout);
+        }
+        let n = file.read(&mut buf)?;
+        let report = &buf[..n];
+        match classify(report, feature_index, func) {
+            Match::Ours => {
+                tracing::debug!(rx = ?report, "hidpp rx");
+                let mut out = [0u8; MAX_REPORT];
+                out[..n].copy_from_slice(report);
+                return Ok(out);
+            }
+            Match::Error(code) => {
+                tracing::debug!(rx = ?report, code, "hidpp error");
+                return Err(HidError::Protocol(code));
+            }
+            Match::Unrelated => continue,
+        }
+    }
+    Err(HidError::Timeout)
+}
+
+/// Send a 7-byte short HID++ report and read back the response.
+///
+/// Only valid on transports that declare report ID `0x10`; see `HidBus`.
 pub fn send_short(
     file: &mut File,
     device_index: u8,
     feature_index: u8,
     func: u8,
     params: [u8; 3],
-) -> Result<[u8; 7], HidError> {
+) -> Result<[u8; MAX_REPORT], HidError> {
     let report: [u8; 7] = [
         REPORT_ID_SHORT,
         device_index,
@@ -45,77 +127,24 @@ pub fn send_short(
         params[1],
         params[2],
     ];
-
-    tracing::debug!(tx = ?report, "send_short");
-    file.write_all(&report)?;
-
-    // Drain non-HID++ reports (e.g. mouse movement) that may arrive before
-    // the response on BT/UHID interfaces.  Each read is guarded by a 200 ms
-    // poll timeout so we never block forever when the kernel driver consumes
-    // the response (as it does over BT).
-    let mut response = [0u8; 7];
-    for _ in 0..16 {
-        if !wait_readable(file, 200) {
-            return Err(HidError::Protocol(0xff)); // timeout
-        }
-        file.read_exact(&mut response)?;
-        tracing::debug!(rx = ?response, "send_short rx");
-        if response[0] == REPORT_ID_SHORT || response[0] == REPORT_ID_LONG {
-            break;
-        }
-    }
-
-    check_short_error(&response)?;
-    Ok(response)
+    exchange(file, &report, feature_index, func)
 }
 
-/// Send a 20-byte long HID++ report and read back a 20-byte response.
+/// Send a 20-byte long HID++ report and read back the response.
+///
+/// This is the only report size available over Bluetooth.
 pub fn send_long(
     file: &mut File,
     device_index: u8,
     feature_index: u8,
     func: u8,
     params: [u8; 16],
-) -> Result<[u8; 20], HidError> {
+) -> Result<[u8; MAX_REPORT], HidError> {
     let mut report = [0u8; 20];
     report[0] = REPORT_ID_LONG;
     report[1] = device_index;
     report[2] = feature_index;
     report[3] = (func << 4) | SW_ID;
     report[4..20].copy_from_slice(&params);
-
-    tracing::debug!(tx = ?report, "send_long");
-    file.write_all(&report)?;
-
-    let mut response = [0u8; 20];
-    for _ in 0..16 {
-        if !wait_readable(file, 200) {
-            return Err(HidError::Protocol(0xff)); // timeout
-        }
-        file.read_exact(&mut response)?;
-        tracing::debug!(rx = ?response, "send_long rx");
-        if response[0] == REPORT_ID_SHORT || response[0] == REPORT_ID_LONG {
-            break;
-        }
-    }
-
-    check_long_error(&response)?;
-    Ok(response)
-}
-
-/// Check a short response for a HID++ error report (feature_index == 0x8f).
-fn check_short_error(response: &[u8; 7]) -> Result<(), HidError> {
-    // Byte 2 == 0x8f signals an error; byte 4 carries the error code.
-    if response[2] == 0x8f {
-        return Err(HidError::Protocol(response[4]));
-    }
-    Ok(())
-}
-
-/// Check a long response for a HID++ error report (feature_index == 0x8f).
-fn check_long_error(response: &[u8; 20]) -> Result<(), HidError> {
-    if response[2] == 0x8f {
-        return Err(HidError::Protocol(response[4]));
-    }
-    Ok(())
+    exchange(file, &report, feature_index, func)
 }
