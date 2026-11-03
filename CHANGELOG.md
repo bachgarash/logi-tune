@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3](https://github.com/bachgarash/logi-tune/compare/v0.1.2...v0.1.3) (2026-11-03)
+
+
+### Bug Fixes
+
+* evaluate hidpp! command once and collapse nested ifs into match … ([ef5fb79](https://github.com/bachgarash/logi-tune/commit/ef5fb79972eda85d2bd4bada770e5253e2ae694b))
+* evaluate hidpp! command once and collapse nested ifs into match guards ([7021fd5](https://github.com/bachgarash/logi-tune/commit/7021fd50bb152e3bf928bb17b658d3ac1690011b))
+
 ## [0.1.2](https://github.com/bachgarash/logi-tune/compare/v0.1.1...v0.1.2) (2026-04-29)
 
 
