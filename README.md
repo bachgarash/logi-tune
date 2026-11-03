@@ -10,7 +10,7 @@ A terminal UI for configuring Logitech MX Master mouse on Linux — button remap
 
 ## Supported devices
 
-MX Master 2S, MX Master 3, MX Master 3 for Mac, MX Master 3S, MX Master 3S for Mac (USB and Bluetooth).
+MX Master 2S, MX Master 3, MX Master 3 for Mac, MX Master 3S, MX Master 3S for Mac, MX Master 4 (Bluetooth; USB and Bluetooth for the others).
 
 ## Requirements
 

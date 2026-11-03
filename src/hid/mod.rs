@@ -21,6 +21,7 @@ pub enum DeviceModel {
     MxMaster3ForMac,
     MxMaster3S,
     MxMaster3SForMac,
+    MxMaster4,
 }
 
 impl DeviceModel {
@@ -32,6 +33,7 @@ impl DeviceModel {
             DeviceModel::MxMaster3ForMac => "MX Master 3 for Mac",
             DeviceModel::MxMaster3S => "MX Master 3S",
             DeviceModel::MxMaster3SForMac => "MX Master 3S for Mac",
+            DeviceModel::MxMaster4 => "MX Master 4",
         }
     }
 }
@@ -46,6 +48,7 @@ pub static SUPPORTED_DEVICES: &[(u16, u16, DeviceModel)] = &[
     (0x046d, 0xb034, DeviceModel::MxMaster3S),
     (0x046d, 0xb028, DeviceModel::MxMaster3S),
     (0x046d, 0xb02a, DeviceModel::MxMaster3SForMac),
+    (0x046d, 0xb042, DeviceModel::MxMaster4), // Bluetooth
 ];
 
 /// Errors that can arise from HID device communication.
