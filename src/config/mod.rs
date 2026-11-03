@@ -56,11 +56,14 @@ pub struct ButtonConfig {
     /// `thumb_button`, which is the one bound through evdev.
     #[serde(skip_serializing_if = "is_default_action")]
     pub gesture_button: ButtonAction,
-    /// The haptic button, on the side above the thumb rest.
+    /// The third (upper) button of the left-side cluster.
     ///
-    /// MX Master 4 only; it is HID++ control 0x01a0 and evdev BTN_FORWARD.
+    /// The MX Master 4 has three buttons on its left side above the thumb:
+    /// `back_button` and `forward_button` are the lower two, and this is the
+    /// upper one. Earlier models have only two. Which HID++ control it
+    /// corresponds to has not been verified.
     #[serde(skip_serializing_if = "is_default_action")]
-    pub haptic_button: ButtonAction,
+    pub upper_side_button: ButtonAction,
     #[serde(skip_serializing_if = "is_default_action")]
     pub smart_shift: ButtonAction,
     /// Which evdev code each physical button sends.
@@ -94,29 +97,30 @@ pub struct EvdevCodes {
     pub back_button: u16,
     pub forward_button: u16,
     pub thumb_button: u16,
-    pub haptic_button: u16,
+    pub upper_side_button: u16,
 }
 
 impl EvdevCodes {
     /// The codes a given model sends.
     ///
-    /// The MX Master 4 has one button more than the 3S and does not map the
-    /// thumb control to the same code: its thumb paddle is `BTN_BACK` (278),
-    /// and `BTN_FORWARD` (277) is the haptic button on the side above the
-    /// thumb rest. Both confirmed with `--watch-buttons` on hardware.
+    /// The MX Master 4 has three buttons in its left-side cluster rather than
+    /// two, and does not map the thumb control to the same code as the 3S:
+    /// codes 275, 276 and 277 are the side cluster bottom-to-top, and the
+    /// thumb paddle is `BTN_BACK` (278). Confirmed with `--watch-buttons` on
+    /// hardware.
     pub fn for_model(model: crate::hid::DeviceModel) -> Self {
         let base = Self {
             middle_button: 274,  // BTN_MIDDLE
             back_button: 275,    // BTN_SIDE
             forward_button: 276, // BTN_EXTRA
             thumb_button: 277,   // BTN_FORWARD
-            // Earlier models have no haptic button at all.
-            haptic_button: EVDEV_CODE_UNMAPPED,
+            // These models have only two side buttons.
+            upper_side_button: EVDEV_CODE_UNMAPPED,
         };
         match model {
             crate::hid::DeviceModel::MxMaster4 => Self {
-                thumb_button: 278,  // BTN_BACK, the thumb paddle
-                haptic_button: 277, // BTN_FORWARD, above the thumb rest
+                thumb_button: 278,      // BTN_BACK, the thumb paddle
+                upper_side_button: 277, // BTN_FORWARD, top of the side cluster
                 ..base
             },
             _ => base,
@@ -164,8 +168,8 @@ impl ButtonConfig {
             Some(("forward_button", &self.forward_button))
         } else if code == c.thumb_button {
             Some(("thumb_button", &self.thumb_button))
-        } else if code == c.haptic_button {
-            Some(("haptic_button", &self.haptic_button))
+        } else if code == c.upper_side_button {
+            Some(("upper_side_button", &self.upper_side_button))
         } else {
             None
         }
@@ -180,7 +184,7 @@ impl Default for ButtonConfig {
             forward_button: ButtonAction::Default,
             thumb_button: ButtonAction::Default,
             gesture_button: ButtonAction::Default,
-            haptic_button: ButtonAction::Default,
+            upper_side_button: ButtonAction::Default,
             smart_shift: ButtonAction::Default,
             evdev_codes: None,
         }
@@ -332,14 +336,14 @@ mod tests {
     }
 
     #[test]
-    fn mx4_thumb_and_haptic_codes_differ_from_3s() {
+    fn mx4_side_cluster_has_three_buttons() {
         let mx4 = EvdevCodes::for_model(DeviceModel::MxMaster4);
         let mx3s = EvdevCodes::for_model(DeviceModel::MxMaster3S);
 
         // Confirmed with --watch-buttons on hardware: the MX Master 4's thumb
         // button is BTN_BACK, not BTN_FORWARD.
         assert_eq!(mx4.thumb_button, 278);
-        assert_eq!(mx4.haptic_button, 277);
+        assert_eq!(mx4.upper_side_button, 277);
         assert_eq!(mx3s.thumb_button, 277);
 
         // The first three are the same on both.
@@ -361,7 +365,7 @@ mod tests {
 
         assert_eq!(
             buttons.for_evdev_code(277, &codes).map(|(f, _)| f),
-            Some("haptic_button")
+            Some("upper_side_button")
         );
         // Left and right clicks are never intercepted.
         assert!(buttons.for_evdev_code(272, &codes).is_none());
@@ -372,7 +376,7 @@ mod tests {
     fn unmapped_gesture_code_never_swallows_a_press() {
         let buttons = ButtonConfig::default();
         let codes = buttons.codes(DeviceModel::MxMaster3S);
-        assert_eq!(codes.haptic_button, EVDEV_CODE_UNMAPPED);
+        assert_eq!(codes.upper_side_button, EVDEV_CODE_UNMAPPED);
         // Code 0 must not match the unmapped field.
         assert!(buttons.for_evdev_code(0, &codes).is_none());
         assert!(buttons.for_evdev_code(278, &codes).is_none());
