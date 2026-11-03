@@ -35,7 +35,13 @@ pub fn render(f: &mut Frame, app: &mut App) {
 }
 
 fn render_title(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
-    let title_text = format!(" logi-tune v0.1.0 — {}", app.device_name);
+    // Taken from Cargo.toml at build time; the literal here was left at
+    // v0.1.0 and had been wrong since the 0.1.1 release.
+    let title_text = format!(
+        " logi-tune v{} — {}",
+        env!("CARGO_PKG_VERSION"),
+        app.device_name
+    );
     let battery_text = format_battery(app);
     let battery_width = battery_text
         .iter()

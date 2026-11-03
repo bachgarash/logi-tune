@@ -25,6 +25,38 @@ async fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let daemon_mode = args.iter().any(|a| a == "--daemon");
 
+    // Without these, --version and --help fell through to the TUI and failed
+    // with "enabling raw mode".
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("logi-tune {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print!(
+            "logi-tune {} — configure Logitech MX Master mice on Linux
+
+USAGE:
+    logi-tune [MODE]
+
+MODES:
+    (none)               open the TUI
+    --daemon             headless; applies config and remaps buttons
+    --dry-run            show what applying the config would change
+    --scan               print the device's HID++ feature and control tables
+    --watch-buttons      print each button press with its evdev code
+    --haptic-list        list the haptic waveforms this device supports
+    --haptic <waveform>  play one haptic waveform
+    --version, -V        print the version
+    --help, -h           print this help
+
+All modes except --daemon and the TUI are read-only, except --haptic.
+--watch-buttons needs the daemon stopped, which holds an exclusive grab.
+",
+            env!("CARGO_PKG_VERSION")
+        );
+        return Ok(());
+    }
+
     // These modes run before any uinput or evdev setup: they only talk HID++
     // and must not disturb a daemon that is already grabbing the device.
     if args.iter().any(|a| a == "--scan") {
