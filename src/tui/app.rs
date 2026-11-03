@@ -190,15 +190,11 @@ impl App {
     fn handle_buttons_key(&mut self, code: KeyCode) {
         const BUTTON_COUNT: usize = 4;
         match code {
-            KeyCode::Up => {
-                if self.button_selected > 0 {
-                    self.button_selected -= 1;
-                }
+            KeyCode::Up if self.button_selected > 0 => {
+                self.button_selected -= 1;
             }
-            KeyCode::Down => {
-                if self.button_selected < BUTTON_COUNT - 1 {
-                    self.button_selected += 1;
-                }
+            KeyCode::Down if self.button_selected < BUTTON_COUNT - 1 => {
+                self.button_selected += 1;
             }
             KeyCode::Enter => {
                 self.input_mode = InputMode::ActionPicker;
@@ -214,15 +210,11 @@ impl App {
             KeyCode::Esc => {
                 self.input_mode = InputMode::Normal;
             }
-            KeyCode::Up => {
-                if self.action_picker_index > 0 {
-                    self.action_picker_index -= 1;
-                }
+            KeyCode::Up if self.action_picker_index > 0 => {
+                self.action_picker_index -= 1;
             }
-            KeyCode::Down => {
-                if self.action_picker_index < ACTION_COUNT - 1 {
-                    self.action_picker_index += 1;
-                }
+            KeyCode::Down if self.action_picker_index < ACTION_COUNT - 1 => {
+                self.action_picker_index += 1;
             }
             KeyCode::Char(c) if ('1'..='8').contains(&c) => {
                 let idx = c as usize - '1' as usize;
@@ -336,28 +328,20 @@ impl App {
     fn handle_scroll_key(&mut self, code: KeyCode) {
         const ROW_COUNT: usize = 3;
         match code {
-            KeyCode::Up => {
-                if self.scroll_selected > 0 {
-                    self.scroll_selected -= 1;
-                }
+            KeyCode::Up if self.scroll_selected > 0 => {
+                self.scroll_selected -= 1;
             }
-            KeyCode::Down => {
-                if self.scroll_selected < ROW_COUNT - 1 {
-                    self.scroll_selected += 1;
-                }
+            KeyCode::Down if self.scroll_selected < ROW_COUNT - 1 => {
+                self.scroll_selected += 1;
             }
             KeyCode::Left => {
                 self.dirty = true;
                 match self.scroll_selected {
-                    0 => {
-                        if self.config.scroll.lines_per_notch > 1 {
-                            self.config.scroll.lines_per_notch -= 1;
-                        }
+                    0 if self.config.scroll.lines_per_notch > 1 => {
+                        self.config.scroll.lines_per_notch -= 1;
                     }
-                    2 => {
-                        if self.config.scroll.smart_shift_threshold > 0 {
-                            self.config.scroll.smart_shift_threshold -= 1;
-                        }
+                    2 if self.config.scroll.smart_shift_threshold > 0 => {
+                        self.config.scroll.smart_shift_threshold -= 1;
                     }
                     _ => {}
                 }
@@ -365,10 +349,8 @@ impl App {
             KeyCode::Right => {
                 self.dirty = true;
                 match self.scroll_selected {
-                    0 => {
-                        if self.config.scroll.lines_per_notch < 10 {
-                            self.config.scroll.lines_per_notch += 1;
-                        }
+                    0 if self.config.scroll.lines_per_notch < 10 => {
+                        self.config.scroll.lines_per_notch += 1;
                     }
                     2 => {
                         self.config.scroll.smart_shift_threshold =
@@ -377,11 +359,9 @@ impl App {
                     _ => {}
                 }
             }
-            KeyCode::Char(' ') => {
-                if self.scroll_selected == 1 {
-                    self.config.scroll.invert = !self.config.scroll.invert;
-                    self.dirty = true;
-                }
+            KeyCode::Char(' ') if self.scroll_selected == 1 => {
+                self.config.scroll.invert = !self.config.scroll.invert;
+                self.dirty = true;
             }
             _ => {}
         }
@@ -390,33 +370,27 @@ impl App {
     fn handle_thumb_key(&mut self, code: KeyCode) {
         const ROW_COUNT: usize = 2;
         match code {
-            KeyCode::Up => {
-                if self.thumb_selected > 0 {
-                    self.thumb_selected -= 1;
-                }
+            KeyCode::Up if self.thumb_selected > 0 => {
+                self.thumb_selected -= 1;
             }
-            KeyCode::Down => {
-                if self.thumb_selected < ROW_COUNT - 1 {
-                    self.thumb_selected += 1;
-                }
+            KeyCode::Down if self.thumb_selected < ROW_COUNT - 1 => {
+                self.thumb_selected += 1;
             }
-            KeyCode::Char(' ') => {
-                if self.thumb_selected == 0 {
-                    self.config.thumb_wheel.invert = !self.config.thumb_wheel.invert;
-                    self.dirty = true;
-                }
+            KeyCode::Char(' ') if self.thumb_selected == 0 => {
+                self.config.thumb_wheel.invert = !self.config.thumb_wheel.invert;
+                self.dirty = true;
             }
-            KeyCode::Left => {
-                if self.thumb_selected == 1 && self.config.thumb_wheel.sensitivity > 1 {
-                    self.config.thumb_wheel.sensitivity -= 1;
-                    self.dirty = true;
-                }
+            KeyCode::Left
+                if self.thumb_selected == 1 && self.config.thumb_wheel.sensitivity > 1 =>
+            {
+                self.config.thumb_wheel.sensitivity -= 1;
+                self.dirty = true;
             }
-            KeyCode::Right => {
-                if self.thumb_selected == 1 && self.config.thumb_wheel.sensitivity < 10 {
-                    self.config.thumb_wheel.sensitivity += 1;
-                    self.dirty = true;
-                }
+            KeyCode::Right
+                if self.thumb_selected == 1 && self.config.thumb_wheel.sensitivity < 10 =>
+            {
+                self.config.thumb_wheel.sensitivity += 1;
+                self.dirty = true;
             }
             _ => {}
         }
@@ -425,15 +399,11 @@ impl App {
     fn handle_dpi_key(&mut self, code: KeyCode) {
         let profile_count = self.config.dpi.profiles.len();
         match code {
-            KeyCode::Up => {
-                if self.dpi_selected > 0 {
-                    self.dpi_selected -= 1;
-                }
+            KeyCode::Up if self.dpi_selected > 0 => {
+                self.dpi_selected -= 1;
             }
-            KeyCode::Down => {
-                if profile_count > 0 && self.dpi_selected < profile_count - 1 {
-                    self.dpi_selected += 1;
-                }
+            KeyCode::Down if profile_count > 0 && self.dpi_selected < profile_count - 1 => {
+                self.dpi_selected += 1;
             }
             KeyCode::Left => {
                 if let Some(v) = self.config.dpi.profiles.get_mut(self.dpi_selected) {
@@ -447,29 +417,23 @@ impl App {
                     self.dirty = true;
                 }
             }
-            KeyCode::Enter => {
-                if self.dpi_selected < profile_count {
-                    self.config.dpi.active = self.dpi_selected;
-                    self.dirty = true;
-                }
+            KeyCode::Enter if self.dpi_selected < profile_count => {
+                self.config.dpi.active = self.dpi_selected;
+                self.dirty = true;
             }
-            KeyCode::Char('+') => {
-                if self.config.dpi.profiles.len() < 5 {
-                    self.config.dpi.profiles.push(1600);
-                    self.dirty = true;
-                }
+            KeyCode::Char('+') if self.config.dpi.profiles.len() < 5 => {
+                self.config.dpi.profiles.push(1600);
+                self.dirty = true;
             }
-            KeyCode::Char('-') => {
-                if profile_count > 1 {
-                    self.config.dpi.profiles.remove(self.dpi_selected);
-                    if self.dpi_selected >= self.config.dpi.profiles.len() {
-                        self.dpi_selected = self.config.dpi.profiles.len().saturating_sub(1);
-                    }
-                    if self.config.dpi.active >= self.config.dpi.profiles.len() {
-                        self.config.dpi.active = self.config.dpi.profiles.len().saturating_sub(1);
-                    }
-                    self.dirty = true;
+            KeyCode::Char('-') if profile_count > 1 => {
+                self.config.dpi.profiles.remove(self.dpi_selected);
+                if self.dpi_selected >= self.config.dpi.profiles.len() {
+                    self.dpi_selected = self.config.dpi.profiles.len().saturating_sub(1);
                 }
+                if self.config.dpi.active >= self.config.dpi.profiles.len() {
+                    self.config.dpi.active = self.config.dpi.profiles.len().saturating_sub(1);
+                }
+                self.dirty = true;
             }
             _ => {}
         }
@@ -591,10 +555,11 @@ fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), Hid
     // via evdev regardless.
     macro_rules! hidpp {
         ($e:expr) => {
-            if let Err(HidError::Protocol(_) | HidError::Io(_)) = $e {
-                tracing::debug!("HID++ command skipped (BT limitation)");
-            } else if let Err(e) = $e {
-                return Err(e);
+            match $e {
+                Err(HidError::Protocol(_) | HidError::Io(_)) => {
+                    tracing::debug!("HID++ command skipped (BT limitation)");
+                }
+                result => result?,
             }
         };
     }
