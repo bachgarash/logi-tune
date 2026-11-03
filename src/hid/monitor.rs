@@ -1,8 +1,15 @@
 //! Evdev-based button monitor.
 //!
-//! The logitech-hidpp-device kernel driver consumes HID++ responses before
-//! they reach hidraw, so we cannot use HID++ divert. Instead we read processed
-//! input events from the kernel's evdev interface, which always works.
+//! Button handling reads processed input events from the kernel's evdev
+//! interface rather than diverting controls over HID++. evdev needs no
+//! per-model control table and works on every transport.
+//!
+//! This was previously described as the only option, on the grounds that the
+//! `logitech-hidpp-device` kernel driver consumes HID++ responses before they
+//! reach hidraw. That is not true: HID++ replies arrive fine once the request
+//! uses a report size the transport actually declares (see `HidBus`). Divert
+//! is therefore possible, and is the only way to reach controls that emit no
+//! evdev event at all, such as the MX Master 4's gesture button.
 //!
 //! We grab the device exclusively (EVIOCGRAB) so the original button events
 //! don't also reach the compositor/applications. All events we don't intercept
@@ -36,13 +43,26 @@ impl DeviceMonitor {
     /// Grabs the device exclusively so the original events are not also delivered
     /// to other consumers (compositor, applications).
     pub fn open(hidraw_path: &str) -> Result<Self, HidError> {
+        Self::open_inner(hidraw_path, true)
+    }
+
+    /// Open the evdev device without taking the exclusive grab, so events
+    /// still reach the compositor.
+    ///
+    /// Used by `--watch-buttons`, which only observes. Note that a daemon
+    /// already holding the grab will keep events from reaching this reader.
+    pub fn open_observer(hidraw_path: &str) -> Result<Self, HidError> {
+        Self::open_inner(hidraw_path, false)
+    }
+
+    fn open_inner(hidraw_path: &str, grab: bool) -> Result<Self, HidError> {
         let n = hidraw_path
             .trim_start_matches("/dev/hidraw")
             .parse::<u8>()
             .map_err(|_| HidError::NotFound)?;
 
         let event_path = find_event_device(n)?;
-        tracing::info!(event_path, "evdev monitor opening");
+        tracing::info!(event_path, grab, "evdev monitor opening");
 
         let file = OpenOptions::new()
             .read(true)
@@ -57,12 +77,33 @@ impl DeviceMonitor {
                 }
             })?;
 
-        match unsafe { eviocgrab(file.as_raw_fd(), 1) } {
-            Ok(_) => tracing::info!("evdev exclusive grab acquired"),
-            Err(e) => tracing::warn!("evdev grab failed (pass-through may double-fire): {e}"),
+        if grab {
+            match unsafe { eviocgrab(file.as_raw_fd(), 1) } {
+                Ok(_) => tracing::info!("evdev exclusive grab acquired"),
+                Err(e) => tracing::warn!("evdev grab failed (pass-through may double-fire): {e}"),
+            }
         }
 
         Ok(Self { file })
+    }
+
+    /// Human-readable name for an `EV_KEY` mouse button code.
+    ///
+    /// Note that these are the kernel's generic names and do not say which
+    /// physical button a given mouse wires to them — run `--watch-buttons` to
+    /// find that out for a particular device.
+    pub fn button_name(code: u16) -> &'static str {
+        match code {
+            0x110 => "BTN_LEFT",
+            0x111 => "BTN_RIGHT",
+            0x112 => "BTN_MIDDLE",
+            0x113 => "BTN_SIDE",
+            0x114 => "BTN_EXTRA",
+            0x115 => "BTN_FORWARD",
+            0x116 => "BTN_BACK",
+            0x117 => "BTN_TASK",
+            _ => "?",
+        }
     }
 
     /// Block until an input event arrives and return the raw event.
