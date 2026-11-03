@@ -13,6 +13,37 @@ pub const REPORT_ID_SHORT: u8 = 0x10; // 7-byte report
 pub const REPORT_ID_LONG: u8 = 0x11; // 20-byte report
 pub const DEVICE_INDEX_DIRECT: u8 = 0xff; // USB or BT direct connection
 
+/// Transport the device is attached by, taken from the `HID_ID=BUS:VID:PID`
+/// bus field in sysfs.
+///
+/// This matters because the two transports do not expose the same HID++
+/// report IDs.  Bluetooth MX devices declare **only** report ID `0x11`
+/// (20-byte long) in their HID report descriptor — there is no `0x10`
+/// (7-byte short) report — so a short request is dropped on the floor and
+/// every HID++ call appears to time out.  USB accepts both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HidBus {
+    Usb,
+    Bluetooth,
+    Other(u16),
+}
+
+impl HidBus {
+    /// `BUS_USB` / `BUS_BLUETOOTH` as reported in `HID_ID`.
+    pub fn from_id(bus: u16) -> Self {
+        match bus {
+            0x0003 => HidBus::Usb,
+            0x0005 => HidBus::Bluetooth,
+            other => HidBus::Other(other),
+        }
+    }
+
+    /// Whether short (7-byte) HID++ reports can be used on this transport.
+    pub fn supports_short_reports(&self) -> bool {
+        !matches!(self, HidBus::Bluetooth)
+    }
+}
+
 /// Enumeration of all supported Logitech MX series models.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DeviceModel {
@@ -60,6 +91,10 @@ pub enum HidError {
     Permission { path: String },
     #[error("HID++ error code {0:#04x}")]
     Protocol(u8),
+    #[error("no HID++ reply from device")]
+    Timeout,
+    #[error("device does not support HID++ feature {0:#06x}")]
+    FeatureMissing(u16),
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
