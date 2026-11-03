@@ -357,23 +357,25 @@ pub struct BatteryStatus {
 pub fn get_battery_status(device: &mut MxMaster) -> Result<BatteryStatus, HidError> {
     let fi = get_feature_index(device, FEATURE_UNIFIED_BATTERY)?;
     let response = device.request(fi, 0x01, &[])?;
-    // Payload is [stateOfCharge, levelFlags, chargingStatus, externalPower].
-    // response[5] is the coarse level bitfield (critical/low/good/full), not
-    // the charging status — reading charging state from it reported a
-    // discharging mouse as charging.
-    let level = if response[4] <= 100 {
-        Some(response[4])
-    } else {
-        None
-    };
+    Ok(decode_battery_status(&response[4..8]))
+}
+
+/// Decode a `UNIFIED_BATTERY` (0x1004) `getStatus` payload.
+///
+/// The payload is `[stateOfCharge, levelFlags, chargingStatus, externalPower]`.
+/// `levelFlags` is a coarse critical/low/good/full bitfield and is *not* the
+/// charging status: reading charging state from it treated the "good" flag
+/// (0x04) as the "slow charge" status, so a mouse on battery always looked
+/// like it was charging.
+fn decode_battery_status(payload: &[u8]) -> BatteryStatus {
+    let level = payload.first().copied().filter(|&l| l <= 100);
     // 0=discharging 1=charging 2=charging slow 3=complete 4=error
-    let charging = response[6] == 1 || response[6] == 2;
-    let charge_complete = response[6] == 3;
-    Ok(BatteryStatus {
+    let status = payload.get(2).copied().unwrap_or(0);
+    BatteryStatus {
         level,
-        charging,
-        charge_complete,
-    })
+        charging: status == 1 || status == 2,
+        charge_complete: status == 3,
+    }
 }
 
 /// Control IDs for all remappable buttons on a given model.
@@ -561,6 +563,29 @@ mod tests {
         };
         assert_eq!(r.clamp(1234), 1234);
         assert_eq!(r.clamp(3200), 1600);
+    }
+
+    #[test]
+    fn battery_status_distinguishes_charging_from_discharging() {
+        // Both payloads read from the same MX Master 4, with the kernel's
+        // hidpp_battery sysfs node agreeing each time. Byte 1 is 0x04 in both,
+        // which is why reading charging state from it always said "charging".
+        let discharging = decode_battery_status(&[0x2d, 0x04, 0x00, 0x00]);
+        assert_eq!(discharging.level, Some(45));
+        assert!(!discharging.charging);
+        assert!(!discharging.charge_complete);
+
+        let charging = decode_battery_status(&[0x2d, 0x04, 0x01, 0x01]);
+        assert_eq!(charging.level, Some(45));
+        assert!(charging.charging);
+        assert!(!charging.charge_complete);
+    }
+
+    #[test]
+    fn battery_status_handles_complete_and_unknown() {
+        assert!(decode_battery_status(&[0x64, 0x08, 0x03, 0x01]).charge_complete);
+        // 255 means the device could not report a level.
+        assert_eq!(decode_battery_status(&[0xff, 0x00, 0x00, 0x00]).level, None);
     }
 
     #[test]
