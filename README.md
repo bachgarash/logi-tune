@@ -48,9 +48,50 @@ This runs `logi-tune --daemon` in the background so button mappings stay active 
 ## Usage
 
 ```
-logi-tune          # open the TUI
-logi-tune --daemon # headless mode, reloads config on change
-logi-tune --scan   # print the device's HID++ feature and control tables
+logi-tune                 # open the TUI
+logi-tune --daemon        # headless mode, reloads config on change
+logi-tune --scan          # print the device's HID++ feature and control tables
+logi-tune --watch-buttons # show which evdev code each button sends
+logi-tune --haptic-list   # list the haptic waveforms this device supports
+logi-tune --haptic knock  # play one waveform
+```
+
+### Mapping buttons
+
+Which evdev code a physical button sends varies by model, so it is
+configuration rather than built in. Run `--watch-buttons`, press each button,
+and put the codes in your config:
+
+```toml
+[buttons.evdev_codes]
+middle_button = 274   # BTN_MIDDLE
+back_button = 275     # BTN_SIDE
+forward_button = 276  # BTN_EXTRA
+thumb_button = 277    # BTN_FORWARD
+gesture_button = 278  # BTN_BACK
+```
+
+Those are the defaults, confirmed on an MX Master 4 — which emits all five.
+Left and right click (272, 273) are never intercepted.
+
+`--watch-buttons` needs the daemon stopped, since the daemon takes an exclusive
+grab on the device:
+
+```
+systemctl --user stop logi-tune
+logi-tune --watch-buttons
+```
+
+### Haptics
+
+The MX Master 4 has a haptic motor (HID++ `HAPTIC_FEEDBACK`, 0x19b0) and
+implements 15 waveforms. Earlier models have none, and the settings below are
+skipped on them.
+
+```toml
+[haptics]
+enabled = true
+level = 60   # 0-100; 60 is the factory default
 ```
 
 ### `--scan`
