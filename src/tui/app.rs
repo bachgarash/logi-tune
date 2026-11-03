@@ -11,8 +11,8 @@ use crate::config::Config;
 use crate::hid::{
     HidError, MxMaster,
     features::{
-        BatteryStatus, button_layout, remap_button, set_dpi, set_hi_res_scroll, set_smart_shift,
-        set_thumb_wheel,
+        BatteryStatus, button_layout, dpi_range, remap_button, set_dpi, set_scroll_mode,
+        set_smart_shift, set_thumb_wheel,
     },
 };
 
@@ -550,14 +550,23 @@ fn read_battery_sysfs() -> anyhow::Result<BatteryStatus> {
 }
 
 fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), HidError> {
-    // HID++ commands may silently fail over BT (kernel driver intercepts responses).
-    // We log warnings but never propagate Protocol errors — button mappings work
-    // via evdev regardless.
+    // A setting the device does not implement must not abort the rest of the
+    // apply, and button mappings work through evdev regardless of HID++. So
+    // per-feature failures are logged and skipped.
+    //
+    // These were previously attributed to a Bluetooth limitation. They were
+    // not: short HID++ reports do not exist on Bluetooth, which made every
+    // call fail. See `HidBus`.
     macro_rules! hidpp {
         ($e:expr) => {
             match $e {
-                Err(HidError::Protocol(_) | HidError::Io(_)) => {
-                    tracing::debug!("HID++ command skipped (BT limitation)");
+                Err(
+                    e @ (HidError::Protocol(_)
+                    | HidError::Io(_)
+                    | HidError::Timeout
+                    | HidError::FeatureMissing(_)),
+                ) => {
+                    tracing::warn!("HID++ setting skipped: {e}");
                 }
                 result => result?,
             }
@@ -565,15 +574,22 @@ fn apply_config_to_device(device: &mut MxMaster, cfg: &Config) -> Result<(), Hid
     }
 
     if let Some(&dpi) = cfg.dpi.profiles.get(cfg.dpi.active) {
+        // Clamp to what the sensor accepts; an out-of-range value is rejected
+        // outright, so the whole DPI setting would otherwise be lost.
+        let dpi = match dpi_range(device) {
+            Ok(range) => range.clamp(dpi),
+            Err(_) => dpi,
+        };
         hidpp!(set_dpi(device, dpi));
     }
     hidpp!(set_smart_shift(device, cfg.scroll.smart_shift_threshold));
-    hidpp!(set_hi_res_scroll(device, cfg.scroll.hi_res_multiplier));
-    hidpp!(set_thumb_wheel(
+    hidpp!(set_scroll_mode(
         device,
-        cfg.thumb_wheel.invert,
-        cfg.thumb_wheel.sensitivity
+        cfg.scroll.hi_res,
+        cfg.scroll.invert,
+        cfg.scroll.hi_res_multiplier
     ));
+    hidpp!(set_thumb_wheel(device, cfg.thumb_wheel.invert));
 
     let layout = button_layout(device.model);
     hidpp!(remap_button(
