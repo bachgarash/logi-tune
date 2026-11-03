@@ -9,10 +9,36 @@ const FEATURE_FEATURE_SET: u16 = 0x0001;
 pub const FEATURE_REPROG_CONTROLS_V4: u16 = 0x1b04;
 #[allow(dead_code)]
 const FEATURE_UNIFIED_BATTERY: u16 = 0x1004;
-const FEATURE_SMART_SHIFT: u16 = 0x2100;
-const FEATURE_HI_RES_SCROLLING: u16 = 0x2120;
 const FEATURE_THUMB_WHEEL: u16 = 0x2150;
 const FEATURE_ADJUSTABLE_DPI: u16 = 0x2201;
+
+/// SmartShift feature numbers, newest first.
+///
+/// `0x2111` (enhanced) carries a torque value the older `0x2110` lacks.  The
+/// MX Master 4 only answers for `0x2111`.
+const SMART_SHIFT_FEATURES: &[u16] = &[0x2111, 0x2110];
+
+/// Scroll wheel resolution feature numbers, newest first.
+///
+/// `0x2121` is a mode bitfield; the older `0x2120` took a multiplier.  The MX
+/// Master 4 only answers for `0x2121`.
+const SCROLL_FEATURES: &[u16] = &[0x2121, 0x2120];
+
+// SmartShift 0x2111 wheel modes, from the mode byte of getRatchetControlMode.
+const SMART_SHIFT_FREESPIN: u8 = 1;
+const SMART_SHIFT_RATCHET: u8 = 2;
+
+// Mode bits of HIRES_WHEEL (0x2121) getMode/setMode.  Note that invert is
+// 0x04, not 0x01 — 0x01 diverts wheel events to HID++ notifications, which
+// would stop them reaching evdev and so must be preserved, never guessed.
+const HIRES_BIT_DIVERT: u8 = 0x01;
+const HIRES_BIT_HI_RES: u8 = 0x02;
+const HIRES_BIT_INVERT: u8 = 0x04;
+
+// THUMB_WHEEL (0x2150) getStatus/setReporting payload: byte 0 bit 0 diverts
+// thumb wheel events to HID++, byte 1 bit 0 inverts direction.
+const THUMB_BIT_DIVERT: u8 = 0x01;
+const THUMB_BIT_INVERT: u8 = 0x01;
 
 /// Feature numbers this project knows by name, for `--scan` output.
 ///
@@ -110,31 +136,176 @@ pub fn set_dpi(device: &mut MxMaster, dpi: u16) -> Result<(), HidError> {
     Ok(())
 }
 
-/// Configure SmartShift via SMART_SHIFT (0x2100), function 0x01 (setSmartShift).
+/// Highest SmartShift threshold the device UI range allows; above this the
+/// wheel is effectively always ratcheted.
+const SMART_SHIFT_MAX_THRESHOLD: u8 = 50;
+
+/// Configure SmartShift.
+///
+/// `threshold` is the wheel speed at which the ratchet engages. A threshold of
+/// zero selects permanent free-spin.
+///
+/// On `0x2111` the register is `[mode, threshold, torque]` and is read before
+/// writing so the device's torque setting survives: torque is not represented
+/// in our config, and overwriting it with a guess changes how hard the ratchet
+/// bites.
 pub fn set_smart_shift(device: &mut MxMaster, threshold: u8) -> Result<(), HidError> {
-    let fi = get_feature_index(device, FEATURE_SMART_SHIFT)?;
-    // threshold 0 = always free-spin, 255 = always ratchet
-    device.request(fi, 0x01, &[threshold])?;
+    let (number, fi) = resolve_feature(device, SMART_SHIFT_FEATURES)?;
+    let mode = if threshold == 0 {
+        SMART_SHIFT_FREESPIN
+    } else {
+        SMART_SHIFT_RATCHET
+    };
+    let threshold = threshold.min(SMART_SHIFT_MAX_THRESHOLD);
+
+    if number == 0x2111 {
+        // function 0x01 = getRatchetControlMode -> [mode, threshold, torque]
+        let current = device.request(fi, 0x01, &[])?;
+        let torque = current[6];
+        // function 0x02 = setRatchetControlMode
+        device.request(fi, 0x02, &[mode, threshold, torque])?;
+    } else {
+        // 0x2110: function 0x01 = setSmartShift, [mode, threshold]
+        device.request(fi, 0x01, &[mode, threshold])?;
+    }
     Ok(())
 }
 
-/// Configure hi-res scrolling via HI_RES_SCROLLING (0x2120), function 0x01.
-pub fn set_hi_res_scroll(device: &mut MxMaster, multiplier: u8) -> Result<(), HidError> {
-    let fi = get_feature_index(device, FEATURE_HI_RES_SCROLLING)?;
-    device.request(fi, 0x01, &[multiplier])?;
-    Ok(())
-}
-
-/// Configure the thumb wheel via THUMB_WHEEL (0x2150), function 0x03.
-pub fn set_thumb_wheel(
+/// Configure scroll wheel resolution and direction.
+///
+/// On `0x2121` both live in one mode byte, so the current value is read first
+/// and only the resolution and invert bits are touched — the divert bit routes
+/// wheel events to HID++ notifications instead of evdev, and clobbering it
+/// would silently stop the wheel from scrolling.
+///
+/// `multiplier` is only used on the legacy `0x2120` feature, which took a
+/// resolution multiplier rather than a bitfield.
+pub fn set_scroll_mode(
     device: &mut MxMaster,
+    hi_res: bool,
     invert: bool,
-    sensitivity: u8,
+    multiplier: u8,
 ) -> Result<(), HidError> {
-    let fi = get_feature_index(device, FEATURE_THUMB_WHEEL)?;
-    let invert_byte = if invert { 0x01 } else { 0x00 };
-    device.request(fi, 0x03, &[invert_byte, sensitivity])?;
+    let (number, fi) = resolve_feature(device, SCROLL_FEATURES)?;
+
+    if number == 0x2121 {
+        // function 0x01 = getMode
+        let current = device.request(fi, 0x01, &[])?;
+        let mut mode = current[4] & HIRES_BIT_DIVERT;
+        if hi_res {
+            mode |= HIRES_BIT_HI_RES;
+        }
+        if invert {
+            mode |= HIRES_BIT_INVERT;
+        }
+        // function 0x02 = setMode
+        device.request(fi, 0x02, &[mode])?;
+    } else {
+        // 0x2120: function 0x01 took a resolution multiplier.
+        device.request(fi, 0x01, &[multiplier])?;
+    }
     Ok(())
+}
+
+/// Set thumb wheel direction via THUMB_WHEEL (0x2150).
+///
+/// The payload is `[divert, invert]`. As with the scroll wheel, the divert byte
+/// is read back and preserved rather than zeroed.
+///
+/// There is no sensitivity control in this feature — the MX Master 4 reports
+/// no HID++ field for it, so `thumb_wheel.sensitivity` has no hardware effect.
+pub fn set_thumb_wheel(device: &mut MxMaster, invert: bool) -> Result<(), HidError> {
+    let fi = get_feature_index(device, FEATURE_THUMB_WHEEL)?;
+    // function 0x01 = getStatus -> [divert, invert]
+    let current = device.request(fi, 0x01, &[])?;
+    let divert = current[4] & THUMB_BIT_DIVERT;
+    let invert_byte = if invert { THUMB_BIT_INVERT } else { 0x00 };
+    // function 0x02 = setReporting
+    device.request(fi, 0x02, &[divert, invert_byte])?;
+    Ok(())
+}
+
+/// The DPI values a sensor accepts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DpiRange {
+    pub min: u16,
+    pub max: u16,
+    /// Step between adjacent values, or `None` for an explicit value list.
+    pub step: Option<u16>,
+}
+
+impl DpiRange {
+    /// Clamp `dpi` into this range and onto a step boundary.
+    pub fn clamp(&self, dpi: u16) -> u16 {
+        let dpi = dpi.clamp(self.min, self.max);
+        match self.step {
+            Some(step) if step > 0 => {
+                let offset = dpi.saturating_sub(self.min);
+                self.min + (offset / step) * step
+            }
+            _ => dpi,
+        }
+    }
+}
+
+/// Read the sensor's supported DPI values via ADJUSTABLE_DPI (0x2201).
+///
+/// The list is a sequence of 16-bit words. A word whose top three bits are set
+/// is a step marker rather than a value: the low 13 bits are the step and the
+/// following word is the upper bound. The MX Master 4 reports
+/// `00c8 e032 1f40`, meaning 200 then 250–8000 in steps of 50.
+pub fn dpi_range(device: &mut MxMaster) -> Result<DpiRange, HidError> {
+    let fi = get_feature_index(device, FEATURE_ADJUSTABLE_DPI)?;
+    // function 0x01 = getSensorDpiList, sensor 0
+    let r = device.request(fi, 0x01, &[0x00])?;
+
+    // Byte 4 echoes the sensor index; the list starts at byte 5.
+    parse_dpi_list(&r[5..20]).ok_or(HidError::FeatureMissing(FEATURE_ADJUSTABLE_DPI))
+}
+
+/// Decode the body of a `getSensorDpiList` reply into a range.
+///
+/// Returns `None` when the list is empty, which is how a device that does not
+/// really implement the feature answers.
+fn parse_dpi_list(body: &[u8]) -> Option<DpiRange> {
+    let mut words = Vec::new();
+    for chunk in body.chunks_exact(2) {
+        let w = u16::from_be_bytes([chunk[0], chunk[1]]);
+        if w == 0 {
+            break;
+        }
+        words.push(w);
+    }
+    if words.is_empty() {
+        return None;
+    }
+
+    let mut min = u16::MAX;
+    let mut max = 0u16;
+    let mut step = None;
+    let mut i = 0;
+    while i < words.len() {
+        let w = words[i];
+        // Top three bits set marks a step rather than a DPI value.
+        if w >> 13 == 0b111 {
+            step = Some(w & 0x1fff);
+            if let Some(&upper) = words.get(i + 1) {
+                max = max.max(upper);
+                i += 2;
+                continue;
+            }
+        } else {
+            min = min.min(w);
+            max = max.max(w);
+        }
+        i += 1;
+    }
+
+    Some(DpiRange {
+        min: if min == u16::MAX { max } else { min },
+        max,
+        step,
+    })
 }
 
 /// Remap a button via REPROG_CONTROLS_V4 (0x1b04), function 0x03 (setControlReport).
@@ -186,20 +357,29 @@ pub struct BatteryStatus {
 pub fn get_battery_status(device: &mut MxMaster) -> Result<BatteryStatus, HidError> {
     let fi = get_feature_index(device, FEATURE_UNIFIED_BATTERY)?;
     let response = device.request(fi, 0x01, &[])?;
-    // response[4] = level (0-100, 255 = unknown)
-    // response[5] = charging status: 0=discharging 1=recharging 2=complete 3=error
-    let level = if response[4] <= 100 {
-        Some(response[4])
-    } else {
-        None
-    };
-    let charging = response[5] == 1 || response[5] == 4; // recharging or slow charge
-    let charge_complete = response[5] == 2;
-    Ok(BatteryStatus {
+    Ok(decode_battery_status(&response[4..8]))
+}
+
+/// Decode a `UNIFIED_BATTERY` (0x1004) `getStatus` payload.
+///
+/// The payload is `[stateOfCharge, levelFlags, chargingStatus, externalPower]`.
+/// `levelFlags` is a coarse bitfield that tracks the charge level (0x04 at
+/// 45%, 0x08 at 55%) and is *not* the charging status. Reading charging state
+/// from it treated that bitfield's values as status codes — 0x04 matched the
+/// "slow charge" code — so this function reported a mouse on battery as
+/// charging.
+///
+/// Note the TUI reads battery from the kernel's `hidpp_battery` sysfs node
+/// rather than calling this, so the wrong decode was never on screen.
+fn decode_battery_status(payload: &[u8]) -> BatteryStatus {
+    let level = payload.first().copied().filter(|&l| l <= 100);
+    // 0=discharging 1=charging 2=charging slow 3=complete 4=error
+    let status = payload.get(2).copied().unwrap_or(0);
+    BatteryStatus {
         level,
-        charging,
-        charge_complete,
-    })
+        charging: status == 1 || status == 2,
+        charge_complete: status == 3,
+    }
 }
 
 /// Control IDs for all remappable buttons on a given model.
@@ -360,6 +540,106 @@ mod tests {
         assert_eq!(feature_name(0x19b0), "HAPTIC_FEEDBACK");
         assert_eq!(feature_name(0x2111), "SMART_SHIFT_ENHANCED");
         assert_eq!(feature_name(0xffff), "?");
+    }
+
+    #[test]
+    fn dpi_range_clamps_onto_step_boundary() {
+        // What the MX Master 4 reports: 200, then 250..8000 step 50.
+        let r = DpiRange {
+            min: 200,
+            max: 8000,
+            step: Some(50),
+        };
+        assert_eq!(r.clamp(100), 200, "below min");
+        assert_eq!(r.clamp(60000), 8000, "above max");
+        assert_eq!(r.clamp(1600), 1600, "already on a boundary");
+        assert_eq!(r.clamp(1620), 1600, "rounds down to a boundary");
+        // The default config ships a 6400 profile, which must survive.
+        assert_eq!(r.clamp(6400), 6400);
+    }
+
+    #[test]
+    fn dpi_range_without_step_passes_values_through() {
+        let r = DpiRange {
+            min: 400,
+            max: 1600,
+            step: None,
+        };
+        assert_eq!(r.clamp(1234), 1234);
+        assert_eq!(r.clamp(3200), 1600);
+    }
+
+    #[test]
+    fn battery_status_distinguishes_charging_from_discharging() {
+        // Both payloads read from the same MX Master 4, with the kernel's
+        // hidpp_battery sysfs node agreeing each time. Byte 1 is 0x04 in both,
+        // which is why reading charging state from it always said "charging".
+        // A later read at 55% returned 37 08 01 01 — byte 1 tracks the level,
+        // confirming it is not a status code.
+        let discharging = decode_battery_status(&[0x2d, 0x04, 0x00, 0x00]);
+        assert_eq!(discharging.level, Some(45));
+        assert!(!discharging.charging);
+        assert!(!discharging.charge_complete);
+
+        let charging = decode_battery_status(&[0x2d, 0x04, 0x01, 0x01]);
+        assert_eq!(charging.level, Some(45));
+        assert!(charging.charging);
+        assert!(!charging.charge_complete);
+    }
+
+    #[test]
+    fn battery_status_handles_complete_and_unknown() {
+        assert!(decode_battery_status(&[0x64, 0x08, 0x03, 0x01]).charge_complete);
+        // 255 means the device could not report a level.
+        assert_eq!(decode_battery_status(&[0xff, 0x00, 0x00, 0x00]).level, None);
+    }
+
+    #[test]
+    fn parses_mx4_dpi_list() {
+        // Bytes read from an MX Master 4: 200, then 250..8000 step 50.
+        let body = [
+            0x00, 0xc8, 0xe0, 0x32, 0x1f, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
+        ];
+        assert_eq!(
+            parse_dpi_list(&body),
+            Some(DpiRange {
+                min: 200,
+                max: 8000,
+                step: Some(50),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_explicit_dpi_value_list() {
+        // A device listing discrete values with no step marker.
+        let body = [
+            0x01, 0x90, 0x03, 0x20, 0x06, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
+        ];
+        assert_eq!(
+            parse_dpi_list(&body),
+            Some(DpiRange {
+                min: 400,
+                max: 1600,
+                step: None,
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_empty_dpi_list() {
+        assert_eq!(parse_dpi_list(&[0x00; 15]), None);
+    }
+
+    #[test]
+    fn hires_mode_bits_are_distinct() {
+        // Invert is 0x04 and divert is 0x01; swapping them would stop the
+        // wheel scrolling instead of inverting it.
+        assert_eq!(HIRES_BIT_DIVERT, 0x01);
+        assert_eq!(HIRES_BIT_HI_RES, 0x02);
+        assert_eq!(HIRES_BIT_INVERT, 0x04);
     }
 
     #[test]

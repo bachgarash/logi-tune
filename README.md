@@ -60,6 +60,20 @@ table, its reprogrammable control IDs, and whether the control IDs this build
 expects are among them. It is read-only and is the first thing to run when
 adding a model or diagnosing a setting that does not take effect.
 
+## What is applied in hardware
+
+Not every setting has a HID++ equivalent. These are sent to the device:
+
+| Setting | HID++ feature |
+|---|---|
+| `dpi.profiles` / `dpi.active` | `ADJUSTABLE_DPI` (0x2201), clamped to the sensor's own range |
+| `scroll.smart_shift_threshold` | `SMART_SHIFT_ENHANCED` (0x2111), else `SMART_SHIFT` (0x2110) |
+| `scroll.hi_res`, `scroll.invert` | `HIRES_WHEEL` (0x2121), else `HI_RES_SCROLLING` (0x2120) |
+| `thumb_wheel.invert` | `THUMB_WHEEL` (0x2150) |
+
+These have no HID++ field on the MX series and are software-only:
+`scroll.lines_per_notch` and `thumb_wheel.sensitivity`.
+
 ## HID++ over Bluetooth
 
 Bluetooth MX devices declare **only** report ID `0x11` (20-byte long) in their

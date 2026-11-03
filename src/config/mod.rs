@@ -78,9 +78,17 @@ impl Default for ButtonConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ScrollConfig {
+    /// Software-only: no HID++ feature on the MX series exposes this.
     pub lines_per_notch: u8,
+    /// Applied in hardware via HIRES_WHEEL (0x2121) on the MX Master 4.
     pub invert: bool,
     pub smart_shift_threshold: u8,
+    /// High-resolution (smooth) scrolling. Defaults to on, which is how the
+    /// hardware ships.
+    pub hi_res: bool,
+    /// Only used by the legacy HI_RES_SCROLLING (0x2120) feature, which took a
+    /// multiplier instead of an on/off mode. Ignored on devices that report
+    /// HIRES_WHEEL (0x2121).
     pub hi_res_multiplier: u8,
 }
 
@@ -90,6 +98,7 @@ impl Default for ScrollConfig {
             lines_per_notch: 3,
             invert: false,
             smart_shift_threshold: 10,
+            hi_res: true,
             hi_res_multiplier: 1,
         }
     }
@@ -99,7 +108,9 @@ impl Default for ScrollConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ThumbWheelConfig {
+    /// Applied in hardware via THUMB_WHEEL (0x2150).
     pub invert: bool,
+    /// Software-only: THUMB_WHEEL (0x2150) exposes no sensitivity field.
     pub sensitivity: u8,
 }
 
