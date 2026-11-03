@@ -50,15 +50,81 @@ pub struct ButtonConfig {
     pub back_button: ButtonAction,
     pub forward_button: ButtonAction,
     pub thumb_button: ButtonAction,
-    // Kept for config file compatibility and HID++ apply; not capturable via evdev on BT
+    /// The MX Master 4's second thumb control.
+    ///
+    /// This was previously assumed not to be capturable via evdev on
+    /// Bluetooth and so was applied over HID++ only. It is: the MX Master 4
+    /// emits an evdev code for all seven of its buttons.
     #[serde(skip_serializing_if = "is_default_action")]
     pub gesture_button: ButtonAction,
     #[serde(skip_serializing_if = "is_default_action")]
     pub smart_shift: ButtonAction,
+    /// Which evdev code each physical button sends on this device.
+    pub evdev_codes: EvdevCodes,
 }
 
 fn is_default_action(a: &ButtonAction) -> bool {
     matches!(a, ButtonAction::Default)
+}
+
+/// Which evdev `EV_KEY` code each physical button sends.
+///
+/// These differ between MX models — the MX Master 4 declares codes 272–278
+/// and does not use the same assignment as the 3S — and the kernel's generic
+/// names (`BTN_SIDE`, `BTN_BACK`, …) do not say which physical button a mouse
+/// wires to them. So this is configuration, not a hardcoded per-model table:
+/// run `logi-tune --watch-buttons`, press each button, and put the codes here.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct EvdevCodes {
+    pub middle_button: u16,
+    pub back_button: u16,
+    pub forward_button: u16,
+    pub thumb_button: u16,
+    pub gesture_button: u16,
+}
+
+impl Default for EvdevCodes {
+    fn default() -> Self {
+        // BTN_MIDDLE, BTN_SIDE, BTN_EXTRA, BTN_FORWARD, BTN_BACK.
+        //
+        // Confirmed with --watch-buttons on an MX Master 4, which emits all
+        // five; the first four match the MX Master 3S for Mac. 278 was
+        // previously claimed by no field, so that button did nothing.
+        Self {
+            middle_button: 274,
+            back_button: 275,
+            forward_button: 276,
+            thumb_button: 277,
+            gesture_button: 278,
+        }
+    }
+}
+
+impl ButtonConfig {
+    /// The action bound to an evdev button code, and the config field it came
+    /// from.
+    ///
+    /// Returns `None` when no field claims the code, which is how an
+    /// unconfigured button reaches here.
+    pub fn for_evdev_code(&self, code: u16) -> Option<(&'static str, &ButtonAction)> {
+        let c = &self.evdev_codes;
+        // Checked in order, so an ambiguous config resolves predictably
+        // rather than depending on map iteration.
+        if code == c.middle_button {
+            Some(("middle_button", &self.middle_button))
+        } else if code == c.back_button {
+            Some(("back_button", &self.back_button))
+        } else if code == c.forward_button {
+            Some(("forward_button", &self.forward_button))
+        } else if code == c.thumb_button {
+            Some(("thumb_button", &self.thumb_button))
+        } else if code == c.gesture_button {
+            Some(("gesture_button", &self.gesture_button))
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for ButtonConfig {
@@ -70,6 +136,7 @@ impl Default for ButtonConfig {
             thumb_button: ButtonAction::Default,
             gesture_button: ButtonAction::Default,
             smart_shift: ButtonAction::Default,
+            evdev_codes: EvdevCodes::default(),
         }
     }
 }
@@ -203,5 +270,75 @@ impl Config {
         std::fs::write(&path, raw)
             .with_context(|| format!("writing config to {}", path.display()))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn with_thumb(combo: &str) -> ButtonConfig {
+        ButtonConfig {
+            thumb_button: ButtonAction::KeyCombo(combo.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn evdev_codes_resolve_to_their_fields() {
+        let buttons = with_thumb("super");
+
+        let (field, action) = buttons
+            .for_evdev_code(277)
+            .expect("277 is the thumb button");
+        assert_eq!(field, "thumb_button");
+        assert_eq!(action, &ButtonAction::KeyCombo("super".into()));
+
+        // All seven MX Master 4 codes now resolve; 278 was previously
+        // claimed by no field, which is why that button did nothing.
+        assert_eq!(
+            buttons.for_evdev_code(278).map(|(f, _)| f),
+            Some("gesture_button")
+        );
+        // Left and right clicks are deliberately never intercepted.
+        assert!(buttons.for_evdev_code(272).is_none());
+        assert!(buttons.for_evdev_code(273).is_none());
+    }
+
+    #[test]
+    fn remapping_a_code_moves_the_binding() {
+        let buttons = ButtonConfig {
+            evdev_codes: EvdevCodes {
+                thumb_button: 279,
+                ..Default::default()
+            },
+            ..with_thumb("super")
+        };
+
+        assert_eq!(
+            buttons.for_evdev_code(279).map(|(f, _)| f),
+            Some("thumb_button")
+        );
+        assert!(buttons.for_evdev_code(277).is_none());
+    }
+
+    #[test]
+    fn existing_config_files_load_without_evdev_codes() {
+        // A file written before [buttons.evdev_codes] existed.
+        let raw = r#"
+            [buttons]
+            middle_button = "Default"
+
+            [buttons.thumb_button]
+            KeyCombo = "super"
+        "#;
+        let cfg: Config = toml::from_str(raw).expect("old config still parses");
+        assert_eq!(cfg.buttons.evdev_codes, EvdevCodes::default());
+        assert_eq!(
+            cfg.buttons.for_evdev_code(277).map(|(f, _)| f),
+            Some("thumb_button")
+        );
+        // Defaults for sections the file omits entirely.
+        assert!(cfg.haptics.enabled);
     }
 }

@@ -32,6 +32,9 @@ async fn main() -> anyhow::Result<()> {
     if args.iter().any(|a| a == "--haptic-list") {
         return run_haptic_list();
     }
+    if args.iter().any(|a| a == "--watch-buttons") {
+        return run_watch_buttons();
+    }
     if let Some(i) = args.iter().position(|a| a == "--haptic") {
         let name = args
             .get(i + 1)
@@ -164,6 +167,57 @@ fn run_scan() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Print each button press as it happens, so a user can find out which evdev
+/// code their physical buttons send.
+///
+/// The codes differ between MX models, and the kernel's generic names
+/// (`BTN_SIDE`, `BTN_BACK`, …) do not say which physical button a mouse wires
+/// to them. This observes without grabbing, so the buttons keep working
+/// normally while you press them.
+fn run_watch_buttons() -> anyhow::Result<()> {
+    let device = hid::MxMaster::open()
+        .map_err(|e| anyhow::anyhow!("{e}\n\nSee README for the udev rule."))?;
+
+    println!("{} at {}", device.model.display_name(), device.path);
+
+    // The daemon takes an exclusive grab, which would starve this reader.
+    let daemon_running = std::process::Command::new("systemctl")
+        .args(["--user", "is-active", "--quiet", "logi-tune"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if daemon_running {
+        println!(
+            "\nThe logi-tune daemon is running and holds an exclusive grab, so no\n\
+             events will reach this watcher. Stop it first:\n\
+             \n    systemctl --user stop logi-tune\n"
+        );
+        return Ok(());
+    }
+
+    let cfg = config::Config::load()?;
+    let mut monitor = hid::monitor::DeviceMonitor::open_observer(&device.path)?;
+    println!("\nPress each button. Ctrl-C when done.\n");
+    println!("  code  name           bound to");
+
+    loop {
+        let ev = monitor.read_raw()?;
+        // EV_KEY presses only; releases and movement are noise here.
+        if ev.ev_type == 1 && ev.value == 1 {
+            let bound = match cfg.buttons.for_evdev_code(ev.code) {
+                Some((field, action)) => format!("{field} = {action}"),
+                None => "nothing — set this code in [buttons.evdev_codes]".to_string(),
+            };
+            println!(
+                "  {:<5} {:<14} {}",
+                ev.code,
+                hid::monitor::DeviceMonitor::button_name(ev.code),
+                bound
+            );
+        }
+    }
 }
 
 /// List the haptic waveforms the connected device implements.
@@ -321,20 +375,28 @@ fn run_monitor(
     }
 }
 
-/// Map evdev key codes to button actions for the MX Master series.
+/// Map evdev key codes to button actions.
+///
+/// The code for each physical button comes from `[buttons.evdev_codes]`,
+/// because it varies by model. An unrecognised code is passed through
+/// untouched, but logged once so it is discoverable: a button that sends a
+/// code no field claims would otherwise look simply broken.
 fn action_for_evdev_code(code: u16, cfg: &config::Config) -> Option<config::ButtonAction> {
-    // MX Master 3S For Mac (BT): confirmed codes
-    let action = match code {
-        274 => &cfg.buttons.middle_button,  // scroll wheel click
-        275 => &cfg.buttons.back_button,    // back button
-        276 => &cfg.buttons.forward_button, // forward button
-        277 => &cfg.buttons.thumb_button,   // thumb/gesture button
-        _ => return None,
+    let Some((field, action)) = cfg.buttons.for_evdev_code(code) else {
+        tracing::debug!(
+            code,
+            name = hid::monitor::DeviceMonitor::button_name(code),
+            "button code not claimed by any config field; run --watch-buttons"
+        );
+        return None;
     };
     match action {
         // Default = behave like a normal mouse button (pass through)
         config::ButtonAction::Default => None,
-        other => Some(other.clone()),
+        other => {
+            tracing::debug!(code, field, "button matched");
+            Some(other.clone())
+        }
     }
 }
 
