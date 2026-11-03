@@ -75,6 +75,7 @@ async fn main() -> anyhow::Result<()> {
         // Create uinput devices before grabbing the physical device so the compositor
         // discovers the virtual mouse before we take exclusive ownership.
         let path = d.path.clone();
+        let model = d.model;
         match (
             input::UinputKeyboard::new(),
             input::UinputMouse::new(),
@@ -82,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
         ) {
             (Ok(keyboard), Ok(mouse), Ok(monitor)) => {
                 let shared = Arc::clone(&shared_config);
-                std::thread::spawn(move || run_monitor(monitor, shared, keyboard, mouse));
+                std::thread::spawn(move || run_monitor(monitor, shared, keyboard, mouse, model));
                 tracing::info!("Button monitor started (evdev, exclusive grab)");
             }
             (Err(e), _, _) | (_, Err(e), _) => tracing::warn!("uinput init failed: {e}"),
@@ -198,6 +199,7 @@ fn run_watch_buttons() -> anyhow::Result<()> {
     }
 
     let cfg = config::Config::load()?;
+    let codes = cfg.buttons.codes(device.model);
     let mut monitor = hid::monitor::DeviceMonitor::open_observer(&device.path)?;
     println!("\nPress each button. Ctrl-C when done.\n");
     println!("  code  name           bound to");
@@ -206,7 +208,7 @@ fn run_watch_buttons() -> anyhow::Result<()> {
         let ev = monitor.read_raw()?;
         // EV_KEY presses only; releases and movement are noise here.
         if ev.ev_type == 1 && ev.value == 1 {
-            let bound = match cfg.buttons.for_evdev_code(ev.code) {
+            let bound = match cfg.buttons.for_evdev_code(ev.code, &codes) {
                 Some((field, action)) => format!("{field} = {action}"),
                 None => "nothing — set this code in [buttons.evdev_codes]".to_string(),
             };
@@ -327,6 +329,7 @@ fn run_monitor(
     shared_config: Arc<RwLock<config::Config>>,
     mut keyboard: input::UinputKeyboard,
     mut mouse: input::UinputMouse,
+    model: hid::DeviceModel,
 ) {
     // Track which button codes had their press swallowed so we can also suppress
     // their release events — forwarding an orphaned release confuses libinput's
@@ -352,7 +355,7 @@ fn run_monitor(
         let action = if ev.ev_type == 1 && ev.value == 1 {
             tracing::info!(code = ev.code, "evdev button press");
             let cfg = shared_config.read().unwrap();
-            action_for_evdev_code(ev.code, &cfg)
+            action_for_evdev_code(ev.code, &cfg, model)
         } else {
             None
         };
@@ -381,8 +384,13 @@ fn run_monitor(
 /// because it varies by model. An unrecognised code is passed through
 /// untouched, but logged once so it is discoverable: a button that sends a
 /// code no field claims would otherwise look simply broken.
-fn action_for_evdev_code(code: u16, cfg: &config::Config) -> Option<config::ButtonAction> {
-    let Some((field, action)) = cfg.buttons.for_evdev_code(code) else {
+fn action_for_evdev_code(
+    code: u16,
+    cfg: &config::Config,
+    model: hid::DeviceModel,
+) -> Option<config::ButtonAction> {
+    let codes = cfg.buttons.codes(model);
+    let Some((field, action)) = cfg.buttons.for_evdev_code(code, &codes) else {
         tracing::debug!(
             code,
             name = hid::monitor::DeviceMonitor::button_name(code),
