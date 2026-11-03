@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use tracing_subscriber::EnvFilter;
 
+mod apply;
 mod config;
 mod hid;
 mod input;
@@ -96,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
 
     if daemon_mode {
         tracing::info!("Running in daemon mode — TUI disabled");
-        run_daemon(shared_config).await
+        run_daemon(shared_config, device).await
     } else {
         tui::run(cfg, device, device_name, shared_config).await
     }
@@ -296,11 +297,41 @@ fn open_monitor_with_retry(path: &str) -> Result<hid::monitor::DeviceMonitor, hi
     Err(last_err)
 }
 
-async fn run_daemon(shared_config: Arc<RwLock<config::Config>>) -> anyhow::Result<()> {
+/// Push the config's HID++ settings to the device, logging the outcome.
+///
+/// Settings like DPI, scroll mode and haptic level are device state; nothing
+/// else restores them, so the daemon has to apply them itself rather than
+/// relying on someone opening the TUI and pressing apply.
+fn apply_to_device(device: Option<&Arc<Mutex<hid::MxMaster>>>, cfg: &config::Config) {
+    let Some(device) = device else { return };
+    let mut guard = match device.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            tracing::error!("device lock poisoned: {e}");
+            return;
+        }
+    };
+    match apply::apply_config_to_device(&mut guard, cfg) {
+        Ok(()) => tracing::info!("applied config to device"),
+        Err(e) => tracing::warn!("could not apply config to device: {e}"),
+    }
+}
+
+async fn run_daemon(
+    shared_config: Arc<RwLock<config::Config>>,
+    device: Option<Arc<Mutex<hid::MxMaster>>>,
+) -> anyhow::Result<()> {
     let config_path = config::Config::path();
     let mut last_modified = std::fs::metadata(&config_path)
         .and_then(|m| m.modified())
         .ok();
+
+    // Apply once at startup: the daemon starts at login, which is exactly
+    // when the device has come back with its own defaults.
+    {
+        let cfg = shared_config.read().unwrap().clone();
+        apply_to_device(device.as_ref(), &cfg);
+    }
 
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -313,8 +344,11 @@ async fn run_daemon(shared_config: Arc<RwLock<config::Config>>) -> anyhow::Resul
             last_modified = modified;
             match config::Config::load() {
                 Ok(cfg) => {
-                    *shared_config.write().unwrap() = cfg;
+                    *shared_config.write().unwrap() = cfg.clone();
                     tracing::info!("Config reloaded from disk");
+                    // Button bindings are read per event, but the HID++
+                    // settings are device state and need pushing again.
+                    apply_to_device(device.as_ref(), &cfg);
                 }
                 Err(e) => tracing::warn!("Failed to reload config: {e}"),
             }
