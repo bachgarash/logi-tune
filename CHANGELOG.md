@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/bachgarash/logi-tune/compare/v0.2.0...v0.3.0) (2026-11-03)
+
+
+### Features
+
+* add --watch-buttons and make evdev button codes configurable ([38d612f](https://github.com/bachgarash/logi-tune/commit/38d612f6ae70ee48e713e3cb00398fddd36fb686))
+* add --watch-buttons and make evdev button codes configurable ([b2a7e11](https://github.com/bachgarash/logi-tune/commit/b2a7e1147f02aae2b7dfff6002b319caf9fb1af5))
+* add haptic motor support (0x19b0) for the MX Master 4 ([fbfc6e9](https://github.com/bachgarash/logi-tune/commit/fbfc6e96f07e351569efad6c899f1c859c38cc4c))
+* add haptic motor support (0x19b0) for the MX Master 4 ([8b8ab2f](https://github.com/bachgarash/logi-tune/commit/8b8ab2fddd17cb9ef5abea463ac56ae0263bb8ea))
+* make HID++ work over Bluetooth, add --scan, fix MX Master 4 control IDs ([e010670](https://github.com/bachgarash/logi-tune/commit/e010670aae0d0941273a934b31d17d7fdce98f01))
+* make HID++ work over Bluetooth, add --scan, fix MX Master 4 control IDs ([ee43bb7](https://github.com/bachgarash/logi-tune/commit/ee43bb7436ff286a0ed8e6afd3ddc7ae77625751))
+
+
+### Bug Fixes
+
+* bind the MX Master 4's fifth button (evdev 278) ([c34a914](https://github.com/bachgarash/logi-tune/commit/c34a914ad22fb72ae21bb18664dd6e2ac6ba4ce3))
+* correct the HID++ wire format of every device setting ([906a20a](https://github.com/bachgarash/logi-tune/commit/906a20a6c6368f79754bc428797d967634dd84d6))
+* correct the HID++ wire format of every device setting ([8ae7610](https://github.com/bachgarash/logi-tune/commit/8ae7610a6980e591f5eb6d916df884d7ca8cf197))
+* stop leaking the AT-SPI2 focus tracker process ([915781c](https://github.com/bachgarash/logi-tune/commit/915781c29b02c94417e8056b74f2e1455c84b3a8))
+* stop leaking the AT-SPI2 focus tracker process ([369af12](https://github.com/bachgarash/logi-tune/commit/369af12dbe20401ea911011809409b8b60fa32a9))
+
 ## [0.2.0](https://github.com/bachgarash/logi-tune/compare/v0.1.3...v0.2.0) (2026-11-03)
 
 
