@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/bachgarash/logi-tune/compare/v0.1.3...v0.2.0) (2026-11-03)
+
+
+### Features
+
+* add MX Master 4 (Bluetooth) support ([903d7fd](https://github.com/bachgarash/logi-tune/commit/903d7fdca02e80f036519f3fed388c1a3fcfafc8))
+* add MX Master 4 (Bluetooth) support ([19e516c](https://github.com/bachgarash/logi-tune/commit/19e516c799693766b76f6b9a6d93436028a02f95))
+
 ## [0.1.3](https://github.com/bachgarash/logi-tune/compare/v0.1.2...v0.1.3) (2026-11-03)
 
 
